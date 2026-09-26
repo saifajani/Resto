@@ -15,6 +15,35 @@ Resto is a personal and family app for remembering what everyone ordered at rest
 
 **Parked:** a native iPhone app in `ios/` (SwiftUI, XcodeGen) that uses the same database. It has never been compiled, and nothing in `ios/` is part of the web build.
 
+## Current Status and Decisions (September 2026)
+
+Decisions from the planning conversation that aren't obvious from the code:
+
+- **Where things are:**
+  - All work is on the branch `claude/restaurant-meal-memory-app-azgvzk`. There is **no `main` branch yet**, so creating `main` from this branch and making it the GitHub default is the first step before Vercel. Until then, the "commit directly to main" rule below doesn't apply.
+  - The owner's local clone is `~/Code/resto` (Schedule1 is at `~/Code/schedule1`).
+- **Tested so far:**
+  - Demo mode ran on the owner's Mac. Nearby and search (live OpenStreetMap), logging visits and the People tab all worked.
+  - After that test, the dish editor was reworked into a clear separate sheet with an "Add dish" button at the bottom.
+- **Not set up yet:** the Supabase project, the Google Cloud key and Vercel. The step-by-step is in README.md.
+- **Structure:**
+  - The owner does **not** need Resto to mirror Schedule1. They want whatever structure is best for a mobile web app that runs cleanly on iPhones.
+  - The agreed answer is to keep Vite + React + TypeScript + Supabase on Vercel. Don't switch to Next.js or React Native.
+  - The Schedule1-style workflow pieces (the `push` / `ship it` verbs, `scripts/db-push.sh`, lint config, port 8081) can stay, since they're generic good practice.
+- **Agreed next work, in order** (the owner still has to say go):
+  1. A service worker (`vite-plugin-pwa`) for instant load, an offline app shell and auto-update.
+  2. Saving visits with no signal: queue locally, then sync to Supabase when back online.
+  3. TanStack Query for data caching.
+  4. iPhone polish: launch screens, no overscroll bounce, and status bar handling in standalone mode.
+  5. Regroup `src/` by feature (`features/restaurants`, `features/visits`, `features/people`, `features/auth`).
+- **Optional:** moving the styling from plain CSS to Tailwind is fine. It only touches `styles.css` and the component class names. If it's done, do it in the same pass as the feature regrouping.
+- **Likely future:** if the App Store, push notifications or geofenced "you've been here" alerts are ever needed, wrap this web app with Capacitor rather than reviving `ios/`. `ios/` will probably be deleted.
+- **Places:** Google Places was chosen over OpenStreetMap for data quality. The owner confirmed they're comfortable with Google billing within the free caps. Before building on it, suggest an "add this place yourself" fallback for restaurants that are missing.
+- **Working with the owner:**
+  - They're a founder, not a day-to-day developer. Explain steps plainly and give exact commands and clicks.
+  - Start answers with a short summary.
+  - In any user-facing copy, never use em dashes.
+
 ## Development Commands
 
 ```bash
