@@ -62,15 +62,27 @@ npm run typecheck
 
 # Unit tests (Vitest, src/**/*.test.ts)
 npm test
+npx vitest run src/lib/summary.test.ts     # one file
+npx vitest run -t "puts you first"         # one test by name
+npx vitest                                 # watch mode
 
 # UI tests: builds, then drives the app in a phone-sized Chromium, once with Google Places and once with OpenStreetMap (mocked)
 npm run test:e2e
+npx tsx tests/e2e.ts                       # Google pass only
+PLACES=osm npx tsx tests/e2e.ts            # OpenStreetMap pass only
+SCREENSHOT_DIR=/tmp/shots npx tsx tests/e2e.ts   # save a screenshot per step
 
-# Database tests: the real Supabase code against local Postgres + PostgREST (see tests/README.md)
+# Database tests: the real Supabase code against local Postgres + PostgREST.
+# Start the database FIRST; it is not started for you (see tests/README.md):
+#   brew install postgresql@16 postgrest
+#   tests/setup-db.sh "$(brew --prefix postgresql@16)/bin" "$(which postgrest)"
 npm run test:db
 
 # Apply pending migrations to the Resto Supabase project
 npm run db:push
+
+# Regenerate the Home Screen icons in public/ from public/icon.svg
+npm run icons
 ```
 
 With no `.env`, the app runs in **demo mode**: the data layer is `demoBackend.ts` (localStorage) and places come from OpenStreetMap. This is useful for UI work without touching real data.
@@ -109,6 +121,8 @@ There is one Supabase project for Resto, used for both local development and pro
 - **UI:** plain CSS with design tokens and dark mode in `src/styles.css`, plus small shared components in `src/components/ui.tsx`. No Tailwind or shadcn here, unlike Schedule1.
 - **Theme:** Light / Dark / Automatic, chosen on the Profile tab. `src/lib/theme.ts` stores the choice in localStorage under `resto:theme` and resolves it to `<html data-theme="light|dark">`, which the dark palette at the top of `styles.css` keys off. The inline script in `index.html` applies it before the first paint and duplicates that resolution, so change both together.
 - **Helpers:** `src/lib/format.ts` (dates, error messages) and `src/lib/summary.ts` (the "what to order" grouping).
+- **Imports:** `@/` is an alias for `src/` (set in `vite.config.ts` and `tsconfig.json`). Pages import siblings relatively; `@/` is mostly used for `@/integrations/supabase/client`.
+- **Home Screen install:** `index.html` carries the Apple meta tags and links `public/manifest.webmanifest`. There is no service worker yet, so the app needs a connection to start.
 
 ### Data Layer
 
@@ -145,6 +159,8 @@ Google billing (per-SKU free caps): Nearby Search is **Pro, 5,000 free a month**
 4. **Demo vs real:** if the "Demo mode" banner shows when it shouldn't, `.env` is missing or the variable names are wrong (they need the `VITE_` prefix, and the dev server has to be restarted after editing).
 5. **Supabase CLI link:** `db push` targets whatever is in `supabase/.temp/project-ref`. Always go through `scripts/db-push.sh`, which verifies the ref.
 6. **Email limits:** Supabase's built-in email sender only sends a few emails an hour. Connect SMTP (for example Resend) if sign-in codes stop arriving.
+7. **`npm run test:e2e` needs `CHROMIUM_PATH` on a Mac.** The default in `tests/e2e.ts` is a Linux CI path (`/opt/pw-browsers/...`). On this Mac the browser is under `~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing` (the version in the folder name changes). The run also needs port 4179 free, and it always runs in demo mode with the map APIs mocked, so it never touches Supabase or Google.
+8. **`npm run test:db` fails fast if the local database isn't up.** It talks to PostgREST on `http://127.0.0.1:3900` (override with `TEST_POSTGREST_URL`); `tests/setup-db.sh` starts Postgres on port 5499 plus PostgREST and applies every migration, and must not run as root.
 
 ## Adding New Features
 
