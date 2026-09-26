@@ -13,6 +13,19 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Resto</title>
+    <script>
+      // Set the theme before the first paint, so there's no flash of the wrong one.
+      // Mirrors resolveTheme() in src/lib/theme.ts; keep the two in step.
+      try {
+        var choice = localStorage.getItem('resto:theme')
+        var dark =
+          choice === 'dark' ||
+          (choice !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+      } catch (e) {
+        document.documentElement.dataset.theme = 'light'
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { backend } from '../lib/config'
 import { ErrorNote } from '../components/ui'
 import { errorMessage } from '../lib/format'
+import { readThemeChoice, saveThemeChoice, THEME_CHOICES, type ThemeChoice } from '../lib/theme'
 
 export default function Profile() {
   const [name, setName] = useState('')
@@ -10,6 +11,7 @@ export default function Profile() {
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice)
 
   useEffect(() => {
     backend.myProfile().then((p) => {
@@ -83,6 +85,28 @@ export default function Profile() {
 
       {status && <p className="success-note" role="status">{status}</p>}
       <ErrorNote message={error} onDismiss={() => setError(null)} />
+
+      <div className="form-section">
+        <h2>Appearance</h2>
+        <div className="segmented" role="radiogroup" aria-label="Appearance">
+          {THEME_CHOICES.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={theme === value}
+              className={theme === value ? 'on' : ''}
+              onClick={() => {
+                setTheme(value)
+                saveThemeChoice(value)
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="fine-print">Automatic follows the light or dark setting on your phone or computer.</p>
+      </div>
 
       <div className="form-section">
         <button className="danger-button wide" onClick={() => backend.signOut()}>Sign out</button>

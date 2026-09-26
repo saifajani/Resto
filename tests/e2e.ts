@@ -58,6 +58,17 @@ async function expectVisible(page: Page, text: string | RegExp, label = String(t
 async function shot(page: Page, name: string) {
   if (shots) await page.screenshot({ path: `${shots}/${name}.png` })
 }
+/** Polls, because a system colour-scheme change reaches the page a tick later. */
+async function expectTheme(page: Page, theme: 'light' | 'dark', label: string) {
+  try {
+    await page.waitForFunction((want) => document.documentElement.dataset.theme === want, theme, { timeout: 5000 })
+    console.log(`PASS  ${label}`)
+  } catch {
+    const actual = await page.evaluate(() => document.documentElement.dataset.theme)
+    console.log(`FAIL  ${label}  -> data-theme=${actual}, wanted ${theme}`)
+    failures++
+  }
+}
 
 async function main() {
   if (shots) mkdirSync(shots, { recursive: true })
@@ -214,16 +225,27 @@ async function main() {
     await page.getByRole('link', { name: 'Profile' }).click()
     await expectVisible(page, 'Got an invite code?', 'profile screen')
 
+    // Appearance: the system is light here, so Automatic resolves to light
+    await expectTheme(page, 'light', 'automatic follows the light system setting')
+    await page.getByRole('radio', { name: 'Dark' }).click()
+    await expectTheme(page, 'dark', 'choosing Dark switches the theme')
+    await shot(page, '09-appearance-dark')
+    await page.reload()
+    await expectTheme(page, 'dark', 'the chosen theme survives a reload')
+    await page.getByRole('radio', { name: 'Automatic' }).click()
+    await expectTheme(page, 'light', 'back to Automatic follows the system again')
+
     nearbyCallsBeforeReload = google.nearby
     // Survives a reload (deep link + saved data)
     await page.goto(BASE + '/')
     await expectVisible(page, '1 visit', 'data persists across reload')
 
-    // Dark mode
+    // Dark mode: on Automatic, a system change applies without a reload
     await page.emulateMedia({ colorScheme: 'dark' })
+    await expectTheme(page, 'dark', 'automatic reacts to the system turning dark')
     await page.getByRole('button', { name: /Pai Northern Thai/ }).first().click()
     await expectVisible(page, 'What to order', 'dark mode page renders')
-    await shot(page, '09-dark-mode')
+    await shot(page, '10-dark-mode')
 
     // Location denied
     const denied = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true })

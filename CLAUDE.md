@@ -107,6 +107,7 @@ There is one Supabase project for Resto, used for both local development and pro
 - **Router:** React Router v7 (`src/App.tsx`). Signed out shows `SignIn`. A first sign-in with no name set shows `Welcome`. Otherwise the tabbed shell.
 - **Session:** `src/session.ts` (`useUserId()`), fed by `backend.onAuthChange`.
 - **UI:** plain CSS with design tokens and dark mode in `src/styles.css`, plus small shared components in `src/components/ui.tsx`. No Tailwind or shadcn here, unlike Schedule1.
+- **Theme:** Light / Dark / Automatic, chosen on the Profile tab. `src/lib/theme.ts` stores the choice in localStorage under `resto:theme` and resolves it to `<html data-theme="light|dark">`, which the dark palette at the top of `styles.css` keys off. The inline script in `index.html` applies it before the first paint and duplicates that resolution, so change both together.
 - **Helpers:** `src/lib/format.ts` (dates, error messages) and `src/lib/summary.ts` (the "what to order" grouping).
 
 ### Data Layer
