@@ -22,14 +22,14 @@ enum API {
     /// Finds the shared restaurant record for an Apple Maps place, creating it the first time.
     static func restaurant(for place: Place) async throws -> Restaurant {
         struct Params: Encodable {
-            let p_apple_place_id: String
+            let p_place_id: String
             let p_name: String
             let p_address: String?
             let p_latitude: Double
             let p_longitude: Double
         }
         let params = Params(
-            p_apple_place_id: place.id,
+            p_place_id: place.id,
             p_name: place.name,
             p_address: place.address,
             p_latitude: place.latitude,

@@ -1,0 +1,144 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { backend } from '../lib/config'
+import { summarize } from '../lib/summary'
+import { displayName, visitPeople, type Restaurant, type Visit } from '../lib/types'
+import { useUserId } from '../session'
+import { ErrorNote, ReorderBadge, Spinner, Stars, errorMessage, formatDate } from '../components/ui'
+
+export default function RestaurantPage() {
+  const { id = '' } = useParams()
+  const navigate = useNavigate()
+  const userId = useUserId()
+  const passed = (useLocation().state as { restaurant?: Restaurant } | null)?.restaurant
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(passed?.id === id ? passed : null)
+  const [visits, setVisits] = useState<Visit[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const [r, v] = await Promise.all([backend.getRestaurant(id), backend.visits(id)])
+      if (!r) {
+        navigate('/', { replace: true })
+        return
+      }
+      setRestaurant(r)
+      setVisits(v)
+    } catch (e) {
+      setError(errorMessage(e))
+    }
+  }, [id, navigate])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const groups = useMemo(() => summarize(visits ?? [], userId), [visits, userId])
+
+  const deleteVisit = async (visit: Visit) => {
+    if (!confirm(`Delete the visit on ${formatDate(visit.visited_at)}? This removes every dish logged on it.`)) return
+    try {
+      await backend.deleteVisit(visit.id)
+      setVisits((vs) => (vs ?? []).filter((v) => v.id !== visit.id))
+    } catch (e) {
+      setError(errorMessage(e))
+    }
+  }
+
+  const mapsUrl =
+    restaurant?.latitude != null && restaurant.longitude != null
+      ? `https://maps.apple.com/?q=${encodeURIComponent(restaurant.name)}&ll=${restaurant.latitude},${restaurant.longitude}`
+      : null
+
+  return (
+    <>
+      <header className="page-header with-back">
+        <button className="back" onClick={() => navigate(-1)} aria-label="Back">‹</button>
+        <div>
+          <h1>{restaurant?.name ?? ' '}</h1>
+          {restaurant?.address && (
+            <p className="muted small">
+              {restaurant.address}
+              {mapsUrl && (
+                <> · <a href={mapsUrl} target="_blank" rel="noreferrer">Map</a></>
+              )}
+            </p>
+          )}
+        </div>
+      </header>
+
+      <div className="page-actions">
+        <Link className="primary button" to={`/r/${id}/log`} state={{ restaurant }}>+ Log a visit</Link>
+      </div>
+      <ErrorNote message={error} onDismiss={() => setError(null)} />
+
+      {visits === null ? (
+        <div className="list-empty"><Spinner /></div>
+      ) : visits.length === 0 ? (
+        <p className="empty-state">No visits yet. Log what everyone ate so you remember next time.</p>
+      ) : (
+        <>
+          <h2 className="section-title">What to order</h2>
+          {groups.map((group) => (
+            <section key={group.personId} className="card">
+              <h3>{group.title}</h3>
+              <ul className="dish-list">
+                {group.items.map((item) => (
+                  <li key={item.key}>
+                    <div className="dish-main">
+                      <div className="dish-name">
+                        {item.name}
+                        {item.timesOrdered > 1 && <span className="times">×{item.timesOrdered}</span>}
+                      </div>
+                      {item.notes && <div className="dish-notes">{item.notes}</div>}
+                    </div>
+                    <Stars rating={item.rating} />
+                    <ReorderBadge yes={item.wouldOrderAgain} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+
+          <h2 className="section-title">Past visits</h2>
+          {visits.map((visit) => {
+            const people = visitPeople(visit)
+            const personById = new Map(people.map((p) => [p.id, p]))
+            const mine = visit.owner_id === userId
+            const dishes = [...visit.dishes].sort((a, b) => a.created_at.localeCompare(b.created_at))
+            return (
+              <section key={visit.id} className="card visit">
+                <div className="visit-header">
+                  <div>
+                    <div className="visit-date">{formatDate(visit.visited_at)}</div>
+                    <div className="muted small">
+                      {people.map((p) => displayName(p, userId)).join(', ')}
+                      {!mine && visit.owner && <> · logged by {visit.owner.display_name}</>}
+                    </div>
+                  </div>
+                  {mine && (
+                    <button className="link danger small" onClick={() => deleteVisit(visit)}>Delete</button>
+                  )}
+                </div>
+                <ul className="dish-list">
+                  {dishes.map((dish) => (
+                    <li key={dish.id}>
+                      <div className="dish-main">
+                        <div className="dish-name">{dish.name}</div>
+                        <div className="dish-who">{displayName(personById.get(dish.person_id), userId)}</div>
+                        {dish.notes && <div className="dish-notes">{dish.notes}</div>}
+                      </div>
+                      <Stars rating={dish.rating} />
+                      <ReorderBadge yes={dish.would_order_again} />
+                    </li>
+                  ))}
+                </ul>
+                {visit.notes && <p className="visit-notes">{visit.notes}</p>}
+              </section>
+            )
+          })}
+        </>
+      )}
+    </>
+  )
+}

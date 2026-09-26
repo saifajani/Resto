@@ -34,10 +34,11 @@ create unique index people_one_link_per_circle on public.people (owner_id, linke
   where linked_user_id is not null;
 create index people_linked_user_idx on public.people (linked_user_id);
 
--- Shared catalog of places, keyed by Apple Maps' stable place ID.
+-- Shared catalog of places. place_id is prefixed by its source, e.g.
+-- "osm:node/123456" (OpenStreetMap, used by the web app) or "apple:I1A2B3" (Apple Maps, iOS app).
 create table public.restaurants (
   id uuid primary key default gen_random_uuid(),
-  apple_place_id text unique,
+  place_id text unique,
   name text not null,
   address text,
   latitude double precision,
@@ -172,8 +173,10 @@ create policy "profiles: read self and linked" on public.profiles
 create policy "profiles: update self" on public.profiles
   for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
+-- Inline checks first for the same INSERT ... RETURNING reason as visits below.
 create policy "people: read visible" on public.people
-  for select to authenticated using (public.can_view_person(id));
+  for select to authenticated
+  using (owner_id = auth.uid() or linked_user_id = auth.uid() or public.can_view_person(id));
 create policy "people: owner adds" on public.people
   for insert to authenticated
   with check (owner_id = auth.uid() and not is_me and linked_user_id is null and invite_code is null);
@@ -231,7 +234,7 @@ grant select on public.restaurants to authenticated;
 -- ---------------------------------------------------------------------------
 
 create function public.get_or_create_restaurant(
-  p_apple_place_id text,
+  p_place_id text,
   p_name text,
   p_address text default null,
   p_latitude double precision default null,
@@ -249,13 +252,33 @@ begin
     raise exception 'Not signed in';
   end if;
 
-  insert into restaurants (apple_place_id, name, address, latitude, longitude)
-  values (p_apple_place_id, p_name, p_address, p_latitude, p_longitude)
-  on conflict (apple_place_id) do update
-    set name = excluded.name,
-        address = coalesce(excluded.address, restaurants.address),
-        latitude = coalesce(excluded.latitude, restaurants.latitude),
-        longitude = coalesce(excluded.longitude, restaurants.longitude)
+  select * into r from restaurants where place_id = p_place_id;
+
+  -- Different map providers use different IDs for the same place. If there is
+  -- already a restaurant with the same name within about 75 m, reuse it so the
+  -- history isn't split between the web and iOS apps.
+  if not found and p_latitude is not null and p_longitude is not null then
+    select * into r
+    from restaurants
+    where lower(trim(name)) = lower(trim(p_name))
+      and latitude is not null
+      and abs(latitude - p_latitude) < 0.0007
+      and abs(longitude - p_longitude) < 0.0009
+    order by created_at
+    limit 1;
+  end if;
+
+  if r.id is not null then
+    update restaurants
+    set address = coalesce(p_address, address)
+    where id = r.id
+    returning * into r;
+    return r;
+  end if;
+
+  insert into restaurants (place_id, name, address, latitude, longitude)
+  values (p_place_id, p_name, p_address, p_latitude, p_longitude)
+  on conflict (place_id) do update set name = restaurants.name
   returning * into r;
 
   return r;

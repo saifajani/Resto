@@ -3,7 +3,9 @@ import MapKit
 
 /// A restaurant from Apple Maps, before it has a record in our database.
 struct Place: Identifiable, Hashable {
-    /// Apple's stable place ID, or a name+coordinate fallback when Maps doesn't provide one.
+    /// "apple:<Apple place ID>", or a name+coordinate fallback when Maps doesn't provide one.
+    /// The server also matches by name and location, so the same restaurant found on the
+    /// web app (OpenStreetMap IDs) shares its history.
     let id: String
     let name: String
     let address: String?
@@ -50,8 +52,8 @@ extension Place {
             .joined(separator: " ")
         let addressParts = [street, item.placemark.locality ?? ""].filter { !$0.isEmpty }
 
-        self.id = item.identifier?.rawValue
-            ?? "fallback:\(name.lowercased()):\(String(format: "%.4f,%.4f", coordinate.latitude, coordinate.longitude))"
+        self.id = item.identifier.map { "apple:\($0.rawValue)" }
+            ?? "apple-fallback:\(name.lowercased()):\(String(format: "%.4f,%.4f", coordinate.latitude, coordinate.longitude))"
         self.name = name
         self.address = addressParts.isEmpty ? nil : addressParts.joined(separator: ", ")
         self.latitude = coordinate.latitude

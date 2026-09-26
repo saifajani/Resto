@@ -10,7 +10,7 @@ struct Profile: Codable, Hashable {
 
 struct Restaurant: Codable, Identifiable, Hashable {
     let id: UUID
-    let applePlaceId: String?
+    let placeId: String?
     let name: String
     let address: String?
     let latitude: Double?
@@ -18,7 +18,7 @@ struct Restaurant: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, address, latitude, longitude
-        case applePlaceId = "apple_place_id"
+        case placeId = "place_id"
     }
 }
 

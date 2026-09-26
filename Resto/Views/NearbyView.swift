@@ -15,7 +15,7 @@ struct NearbyView: View {
     @State private var errorMessage: String?
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
-    private var visitedPlaceIds: Set<String> { Set(mine.compactMap(\.restaurant.applePlaceId)) }
+    private var visitedPlaceIds: Set<String> { Set(mine.compactMap(\.restaurant.placeId)) }
 
     var body: some View {
         List {
