@@ -20,12 +20,15 @@ Resto is a personal and family app for remembering what everyone ordered at rest
 Decisions from the planning conversation that aren't obvious from the code:
 
 - **Where things are:**
-  - All work is on the branch `claude/restaurant-meal-memory-app-azgvzk`. There is **no `main` branch yet**, so creating `main` from this branch and making it the GitHub default is the first step before Vercel. Until then, the "commit directly to main" rule below doesn't apply.
+  - `main` is the branch and the GitHub default (created 26 September 2026 from `claude/restaurant-meal-memory-app-azgvzk`, which is kept only as history). The "commit directly to main" rule below applies from here on.
   - The owner's local clone is `~/Code/resto` (Schedule1 is at `~/Code/schedule1`).
 - **Tested so far:**
   - Demo mode ran on the owner's Mac. Nearby and search (live OpenStreetMap), logging visits and the People tab all worked.
   - After that test, the dish editor was reworked into a clear separate sheet with an "Add dish" button at the bottom.
-- **Not set up yet:** the Supabase project, the Google Cloud key and Vercel. The step-by-step is in README.md.
+- **Supabase is set up** (26 September 2026): project `resto` (ref in `.env`) in Canada (Central), in its own **free** org, separate from the paid org holding the Schedule1 projects. It was moved there because a paid org bills about $10 a month per project. `20260926000000_init.sql` is applied and `site_url` is `http://localhost:8081`, which has to change to the Vercel URL at deploy time.
+- **Sign-in codes need SMTP.** A free project on Supabase's built-in email sender **cannot have custom email templates** (the API rejects it with "Email template modification is not available for free tier projects using the default email provider"), so the emails are Supabase's default links, not the `{{ .Token }}` code the app's sign-in screen asks for. `mailer_otp_length = 6` is set and survives, but connecting custom SMTP is what makes the 6-digit code flow work. It also lifts the 2-emails-an-hour cap and the rule that the built-in sender only delivers to project team members, which is what currently stops family from signing in at all. Note that a project transfer between orgs **resets the email templates**, so they have to be re-applied after one.
+- **v0.1 is deliberately free of charge**: a dedicated Gmail account over SMTP for sign-in emails (500 a day, sender is that Gmail address), the free `.vercel.app` domain, and the free Supabase org. A bought domain plus Resend was priced up and **deferred**, not rejected: it is the upgrade when the app outgrows a Gmail sender. Swapping it in is Supabase settings only, with no app changes.
+- **Not set up yet:** the Google Cloud key and Vercel. The step-by-step is in README.md.
 - **Structure:**
   - The owner does **not** need Resto to mirror Schedule1. They want whatever structure is best for a mobile web app that runs cleanly on iPhones.
   - The agreed answer is to keep Vite + React + TypeScript + Supabase on Vercel. Don't switch to Next.js or React Native.
