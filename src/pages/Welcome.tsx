@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { backend } from '../lib/config'
-import { ErrorNote, errorMessage } from '../components/ui'
+import { ErrorNote } from '../components/ui'
+import { errorMessage } from '../lib/format'
 
 /** First-run prompt so the people you share with see your real name. */
 export default function Welcome({ onDone }: { onDone: () => void }) {

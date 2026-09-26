@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { backend } from '../lib/config'
 import type { Person } from '../lib/types'
-import { ErrorNote, Sheet, Spinner, errorMessage } from '../components/ui'
+import { ErrorNote, Sheet, Spinner } from '../components/ui'
+import { errorMessage } from '../lib/format'
 
 type Invite = { personName: string; code: string }
 

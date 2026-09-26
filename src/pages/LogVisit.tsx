@@ -4,7 +4,8 @@ import { backend } from '../lib/config'
 import { knownDishNames } from '../lib/summary'
 import { displayName, type DraftDish, type Person, type Restaurant } from '../lib/types'
 import { useUserId } from '../session'
-import { ErrorNote, ReorderBadge, Sheet, StarPicker, Stars, errorMessage } from '../components/ui'
+import { ErrorNote, ReorderBadge, Sheet, StarPicker, Stars } from '../components/ui'
+import { errorMessage } from '../lib/format'
 
 function today(): string {
   const d = new Date()
@@ -32,7 +33,8 @@ export default function LogVisit() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([backend.myCircle(), backend.visits(id), restaurant ? Promise.resolve(restaurant) : backend.getRestaurant(id)])
+    const known = passed?.id === id ? passed : null
+    Promise.all([backend.myCircle(), backend.visits(id), known ? Promise.resolve(known) : backend.getRestaurant(id)])
       .then(([people, visits, r]) => {
         setCircle(people)
         const me = people.find((p) => p.is_me)
@@ -41,7 +43,7 @@ export default function LogVisit() {
         if (r) setRestaurant(r)
       })
       .catch((e) => setError(errorMessage(e)))
-  }, [id])
+  }, [id, passed])
 
   const selectedPeople = useMemo(() => circle.filter((p) => selected.has(p.id)), [circle, selected])
   const nameOf = (personId: string) => displayName(circle.find((p) => p.id === personId), userId)

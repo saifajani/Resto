@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { backend } from '../lib/config'
-import { ErrorNote, errorMessage } from '../components/ui'
+import { ErrorNote } from '../components/ui'
+import { errorMessage } from '../lib/format'
 
 export default function Profile() {
   const [name, setName] = useState('')

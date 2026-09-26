@@ -4,7 +4,8 @@ import { backend } from '../lib/config'
 import { summarize } from '../lib/summary'
 import { displayName, visitPeople, type Restaurant, type Visit } from '../lib/types'
 import { useUserId } from '../session'
-import { ErrorNote, ReorderBadge, Spinner, Stars, errorMessage, formatDate } from '../components/ui'
+import { ErrorNote, ReorderBadge, Spinner, Stars } from '../components/ui'
+import { errorMessage, formatDate } from '../lib/format'
 
 export default function RestaurantPage() {
   const { id = '' } = useParams()

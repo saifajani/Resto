@@ -4,7 +4,8 @@ import { backend } from '../lib/config'
 import { useLocation } from '../lib/location'
 import { formatDistance, nearbyPlaces, placesProvider, resolvePlace, searchPlaces } from '../lib/places'
 import type { Place, VisitedRestaurant } from '../lib/types'
-import { ErrorNote, Spinner, errorMessage, formatDate } from '../components/ui'
+import { ErrorNote, Spinner } from '../components/ui'
+import { errorMessage, formatDate } from '../lib/format'
 
 export default function Restaurants() {
   const navigate = useNavigate()

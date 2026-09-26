@@ -1,62 +1,123 @@
-# Resto
+# CLAUDE.md
 
-An app for remembering what you and the people you eat with ordered at restaurants. The owner is setting it up on a Mac for personal and family use, and hasn't done this kind of setup before. Explain each step plainly, do the Terminal work for them, and tell them exactly what to click whenever a step has to happen in a browser.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Layout
+## Project Overview
 
-- `web/`: the main app. Vite + React + TypeScript, deployed to Vercel with Root Directory `web`.
-- `supabase/migrations/0001_init.sql`: the entire database, shared by both apps. It covers tables, row-level security, and the RPC functions `get_or_create_restaurant`, `create_visit`, `create_invite`, `claim_invite` and `set_display_name`.
-- `Resto/`, `project.yml`, `Config/`: the iPhone app (SwiftUI, XcodeGen). It's parked for later and has never been compiled.
+Resto is a personal and family app for remembering what everyone ordered at restaurants, and whether it was worth ordering again. It's a mobile-first web app (installable to the iPhone Home Screen) built with React, TypeScript and Supabase, with Google Places for restaurant lookup.
 
-## Commands (run in `web/`)
+**Screens:**
+- **Restaurants** (`/`): nearby restaurants (places you've visited are pinned to the top), search, and your restaurants
+- **Restaurant** (`/r/:id`): a "what to order" summary per person, plus the visit history
+- **Log a visit** (`/r/:id/log`): who was there, and each dish with 1 to 5 stars, a "would order again" toggle and notes
+- **People** (`/people`): your circle, plus invite codes so companions can see the visits they were on
+- **Profile** (`/profile`): your display name, redeem an invite code, sign out
 
-```sh
-npm install
-npm run dev          # http://localhost:5173
-npm run typecheck
-npm run test:e2e     # Playwright UI test, run once with Google Places and once with OpenStreetMap (mocked)
-npm run test:db      # needs tests/setup-db.sh first, see web/tests/README.md
+**Parked:** a native iPhone app in `ios/` (SwiftUI, XcodeGen) that uses the same database. It has never been compiled, and nothing in `ios/` is part of the web build.
+
+## Development Commands
+
+```bash
+# Install dependencies
+npm i
+
+# Start development server (Vite, http://localhost:8081; 8080 is left free for Schedule1)
+npm run dev
+
+# Build for production (typecheck + Vite build)
 npm run build
+
+# Lint / typecheck
+npm run lint
+npm run typecheck
+
+# Unit tests (Vitest, src/**/*.test.ts)
+npm test
+
+# UI tests: builds, then drives the app in a phone-sized Chromium, once with Google Places and once with OpenStreetMap (mocked)
+npm run test:e2e
+
+# Database tests: the real Supabase code against local Postgres + PostgREST (see tests/README.md)
+npm run test:db
+
+# Apply pending migrations to the Resto Supabase project
+npm run db:push
 ```
 
-## Configuration
+With no `.env`, the app runs in **demo mode**: the data layer is `demoBackend.ts` (localStorage) and places come from OpenStreetMap. This is useful for UI work without touching real data.
 
-`web/.env.local` (gitignored; copy from `web/.env.example`):
+## Environments & Database Changes
 
-- `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`: if unset, the app runs in demo mode, with data kept in localStorage.
-- `VITE_GOOGLE_MAPS_API_KEY`: a browser key for Places API (New). If unset, the app falls back to OpenStreetMap.
+There is one Supabase project for Resto, used for both local development and production. It's a personal app with no staging project yet. The ref is in `.env` as `VITE_SUPABASE_PROJECT_ID`. It is a **separate project from Schedule1's**: never run Resto migrations against a Schedule1 ref, and vice versa.
 
-Set the same three values as Environment Variables in Vercel.
+**Env files:** `.env` (git-ignored, copy from `.env.example`) holds `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PROJECT_ID` and `VITE_GOOGLE_MAPS_API_KEY`. Vercel has the same variables under Project Settings > Environment Variables.
 
-## First-time setup checklist
+**Deploy model:** Vercel builds and publishes the frontend on every push to `main`, and is fully automatic. DB schema changes are applied separately with the Supabase CLI via `scripts/db-push.sh`, which links the Resto ref and hard-verifies it before `db push --linked`. Frontend and DB deploys are decoupled.
 
-Do these in order. Check what's already done before redoing anything.
+**Every schema change:**
 
-1. Tools: Homebrew, Node LTS (`brew install node`), GitHub CLI (`brew install gh`, then `gh auth login`), Supabase CLI (`brew install supabase/tap/supabase`), Google Cloud CLI (`brew install --cask google-cloud-sdk`), Vercel CLI (`npm i -g vercel`).
-2. Demo run: `cd web && npm install && npm run dev`.
-3. Supabase:
-   - The user creates the project in the browser (Canada region) and saves the database password.
-   - Apply `supabase/migrations/0001_init.sql`. The easiest route is `supabase login`, then `supabase link --project-ref <ref>`, then `supabase db push`. The alternative is pasting the file into the dashboard's SQL Editor.
-   - In the dashboard, change the Magic Link email template body to include `{{ .Token }}`, because the app signs in with a 6-digit code, not a link.
-   - Put the Project URL and anon key into `.env.local`.
-4. Google Places:
-   - The user creates a Cloud project and links billing in the browser (a card is required).
-   - Then run `gcloud auth login`, `gcloud config set project <id>` and `gcloud services enable places.googleapis.com apikeys.googleapis.com`.
-   - Create a key restricted to `places.googleapis.com` and to the referrer `http://localhost:5173/*` with `gcloud services api-keys create`. Later, add the Vercel URL as a second referrer.
-   - In the browser, set per-day quotas under APIs & Services > Places API (New) > Quotas: about 150 a day for Search Nearby (5,000 free a month), and about 300 a day each for Autocomplete and Get Place. Add a $5 budget alert under Billing.
-5. Merge the working branch into `main` (use `gh pr create`, then `gh pr merge`).
-6. Vercel:
-   - `vercel login`, then `vercel link` from `web/`.
-   - Add the three env vars with `vercel env add ... production`, then `vercel --prod`.
-   - Afterwards, add the Vercel URL to the Google key's referrers and to Supabase's Auth Site URL.
-7. Phone: open the URL in Safari, then Share > Add to Home Screen.
+```
+1. Author a migration FILE:   supabase migration new <name>   (then edit the .sql)
+2. Test locally:              tests/setup-db.sh + npm run test:db   (add checks for the change)
+3. Apply (on "ship it"):      ./scripts/db-push.sh   (or: npm run db:push)
+4. Commit the migration file + push to main (Vercel publishes the frontend).
+```
 
-Never print or commit secrets. `.env.local` and `Config/Secrets.xcconfig` are gitignored.
+**The two verbs:**
+- **"push"**: commit and `git push origin main`. This repo deploys from `main`, so commit **directly to main, with no feature branches**. Vercel goes live on its own within a minute or two.
+- **"ship it"**: apply all not-yet-applied migration files to the Supabase project with `./scripts/db-push.sh`. `git push` is never a signal to apply migrations.
 
-## Conventions
+**Other rules:** a rollback is a **new forward migration**, never a manual revert. The initial schema is `supabase/migrations/20260926000000_init.sql`.
 
-- All reads and writes go through the `Backend` interface (`web/src/lib/backend.ts`). There are two implementations: `supabaseBackend.ts` and `demoBackend.ts`. Keep them in step with each other.
-- Places providers live in `web/src/lib/places/` (`google.ts` and `osm.ts`). Place IDs carry a prefix: `google:...` or `osm:node/...`.
-- Google's terms only allow storing place IDs. Keep Nearby results in memory, never in localStorage.
-- Access control belongs in Postgres row-level security, not in the client. A new policy with `INSERT ... RETURNING` needs an inline owner check (see the comments in the migration file).
-- After a UI change, run `npm run typecheck` and `npm run test:e2e`.
+**Standing RLS check:** row-level security *is* the sharing model, so `npm run test:db` plays three users (owner, invited companion, stranger) and must stay green before any policy change ships.
+
+## Architecture Overview
+
+### Frontend Structure
+
+- **Router:** React Router v7 (`src/App.tsx`). Signed out shows `SignIn`. A first sign-in with no name set shows `Welcome`. Otherwise the tabbed shell.
+- **Session:** `src/session.ts` (`useUserId()`), fed by `backend.onAuthChange`.
+- **UI:** plain CSS with design tokens and dark mode in `src/styles.css`, plus small shared components in `src/components/ui.tsx`. No Tailwind or shadcn here, unlike Schedule1.
+- **Helpers:** `src/lib/format.ts` (dates, error messages) and `src/lib/summary.ts` (the "what to order" grouping).
+
+### Data Layer
+
+Every read and write goes through the `Backend` interface (`src/lib/backend.ts`), chosen in `src/lib/config.ts`:
+- `supabaseBackend.ts`: the real one. Uses `src/integrations/supabase/client.ts`.
+- `demoBackend.ts`: localStorage, single user, and invites are disabled.
+
+Keep the two implementations in step with each other when changing the interface.
+
+### Authentication Flow
+
+Supabase Auth with **emailed 6-digit codes** (`signInWithOtp` + `verifyOtp`), not magic links. Links open in Safari rather than the Home Screen app. The Supabase "Magic Link" email template must include `{{ .Token }}`. A trigger on `auth.users` creates a `profiles` row and the user's own "me" row in `people`.
+
+### Sharing Model (enforced in Postgres RLS)
+
+- Every user owns a circle (`people`, with one `is_me` row). Visits and dishes belong to whoever logged them, and each dish is attributed to a person in that circle.
+- `create_invite(person_id)` makes a 6-character code. `claim_invite(code)` sets `people.linked_user_id`, which gives that account **read-only** access to every visit the person was on, including future ones.
+- Helper functions (`can_view_visit`, `can_view_person`, `can_view_profile`, `owns_visit`, `owns_person`) are `SECURITY DEFINER` so that policies don't recurse.
+- Writes that must be atomic go through RPCs: `create_visit` (visit, people and dishes in one transaction), `get_or_create_restaurant`, `set_display_name`.
+
+### Places (restaurant lookup)
+
+`src/lib/places/`: `google.ts` (Places API (New)) when `VITE_GOOGLE_MAPS_API_KEY` is set, otherwise `osm.ts` (Overpass + Photon). IDs are prefixed with their source: `google:ChIJ...` or `osm:node/123`.
+
+Google billing (per-SKU free caps): Nearby Search is **Pro, 5,000 free a month**. Search uses Autocomplete with a session token, closed by a single Place Details call for Essentials fields only (`id,location,shortFormattedAddress`), which makes the typing free. The key is restricted by referrer and to Places API (New), with daily quotas set in Cloud Console.
+
+`get_or_create_restaurant` reuses an existing restaurant with the same name within about 75 m, so a place found through Google, OpenStreetMap or Apple Maps (iOS) shares one history.
+
+## Common Pitfalls
+
+1. **INSERT ... RETURNING under RLS:** a `SECURITY DEFINER` helper can't see a row inserted by the same statement. Select policies on tables the app inserts into (`visits`, `people`) need an inline `owner_id = auth.uid()` check before the helper call. Both apps once failed on this.
+2. **Google terms:** only place IDs may be stored long term. Keep Nearby results in memory (the 15-minute cache in `google.ts`), never in localStorage. Saving the name and address of restaurants the user actually visited is the user's own record.
+3. **Google field masks decide the price.** Adding a field to a request can move it to a more expensive tier. Check before changing the `X-Goog-FieldMask` values.
+4. **Demo vs real:** if the "Demo mode" banner shows when it shouldn't, `.env` is missing or the variable names are wrong (they need the `VITE_` prefix, and the dev server has to be restarted after editing).
+5. **Supabase CLI link:** `db push` targets whatever is in `supabase/.temp/project-ref`. Always go through `scripts/db-push.sh`, which verifies the ref.
+6. **Email limits:** Supabase's built-in email sender only sends a few emails an hour. Connect SMTP (for example Resend) if sign-in codes stop arriving.
+
+## Adding New Features
+
+- UI change: `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:e2e`.
+- Data change: update the `Backend` interface and both implementations, add a migration, and extend `tests/db-integration.ts`.
+- New places field: check its Google pricing tier first (see Pitfall 3).

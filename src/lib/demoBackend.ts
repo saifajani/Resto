@@ -43,7 +43,7 @@ function load(): Store {
 }
 
 export function createDemoBackend(): Backend {
-  let store = load()
+  const store = load()
   const listeners = new Set<AuthListener>()
 
   const save = () => {

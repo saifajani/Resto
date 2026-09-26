@@ -7,7 +7,7 @@ PGBIN=${1:-/usr/lib/postgresql/16/bin}
 POSTGREST=${2:-postgrest}
 DIR=${TEST_DB_DIR:-/var/tmp/resto-test-db}
 PORT=5499
-ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
 rm -rf "$DIR" && mkdir -p "$DIR"
 "$PGBIN/initdb" -D "$DIR/data" -A trust -U postgres >/dev/null
@@ -30,7 +30,7 @@ grant usage on schema auth, public to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
 alter default privileges in schema public grant all on tables to anon, authenticated;
 SQL
-$PSQL -d resto -f "$ROOT/supabase/migrations/0001_init.sql"
+for migration in "$ROOT"/supabase/migrations/*.sql; do $PSQL -d resto -f "$migration"; done
 $PSQL -d resto -c "insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111'), ('22222222-2222-2222-2222-222222222222'), ('33333333-3333-3333-3333-333333333333')"
 
 cat > "$DIR/postgrest.conf" <<CONF

@@ -65,7 +65,8 @@ async function main() {
   const build = spawnSync('npx', ['vite', 'build'], { env, stdio: 'inherit' })
   if (build.status !== 0) process.exit(1)
   console.log(`Testing with ${PROVIDER === 'google' ? 'Google Places' : 'OpenStreetMap'}`)
-  const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'], { stdio: 'ignore' })
+  // detached + negative pid below, so the whole npx -> vite process group is stopped afterwards
+  const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'], { stdio: 'ignore', detached: true })
   await new Promise((r) => setTimeout(r, 2000))
 
   const browser = await chromium.launch({ executablePath: CHROMIUM })
@@ -248,7 +249,7 @@ async function main() {
     }
   } finally {
     await browser.close()
-    server.kill()
+    process.kill(-server.pid!)
   }
 
   console.log(failures ? `\n${failures} FAILED` : '\nAll UI checks passed')

@@ -74,11 +74,3 @@ export function ErrorNote({ message, onDismiss }: { message: string | null; onDi
 export function Spinner() {
   return <div className="spinner" aria-label="Loading" />
 }
-
-export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
-export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
-}
