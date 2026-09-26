@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test:db": "tsx tests/db.test.ts",
-    "test:e2e": "vite build && tsx tests/e2e.ts",
+    "test:e2e": "tsx tests/e2e.ts && PLACES=osm tsx tests/e2e.ts",
     "icons": "tsx tests/make-icons.ts"
   },
   "dependencies": {

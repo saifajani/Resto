@@ -1,9 +1,9 @@
 /**
- * Drives the built app in a phone-sized Chromium, in demo mode, with
- * OpenStreetMap responses mocked. Run `npm run build` first.
+ * Builds the app and drives it in a phone-sized Chromium, in demo mode, with
+ * map responses mocked. PLACES=google (default) or PLACES=osm picks the provider.
  * SCREENSHOT_DIR (optional) saves screenshots of each step.
  */
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { chromium, type Page } from 'playwright-core'
 
@@ -12,6 +12,23 @@ const shots = process.env.SCREENSHOT_DIR
 const PORT = 4179
 const BASE = `http://127.0.0.1:${PORT}`
 const HOME = { latitude: 43.6487, longitude: -79.3854 } // downtown Toronto
+const PROVIDER = process.env.PLACES === 'osm' ? 'osm' : 'google'
+const TEST_KEY = 'test-browser-key'
+
+const googleNearbyFixture = {
+  places: [
+    { id: 'ChIJpai', displayName: { text: 'Pai Northern Thai' }, shortFormattedAddress: '18 Duncan Street', location: { latitude: 43.6479, longitude: -79.3888 }, primaryTypeDisplayName: { text: 'Thai' } },
+    { id: 'ChIJrichmond', displayName: { text: 'Richmond Station' }, shortFormattedAddress: '1 Richmond Street West', location: { latitude: 43.6516, longitude: -79.3792 }, primaryTypeDisplayName: { text: 'Regional' } },
+    { id: 'ChIJterroni', displayName: { text: 'Terroni' }, location: { latitude: 43.6455, longitude: -79.395 }, primaryTypeDisplayName: { text: 'Italian Restaurant' } },
+  ],
+}
+const googleAutocompleteFixture = {
+  suggestions: [
+    { placePrediction: { placeId: 'ChIJpai', text: { text: 'Pai Northern Thai, Duncan Street' }, structuredFormat: { mainText: { text: 'Pai Northern Thai' }, secondaryText: { text: 'Duncan Street, Toronto' } }, types: ['thai_restaurant', 'restaurant', 'food'], distanceMeters: 290 } },
+    { placePrediction: { placeId: 'ChIJpaiuptown', text: { text: 'Pai Uptown' }, structuredFormat: { mainText: { text: 'Pai Uptown' }, secondaryText: { text: 'Yonge Street, Toronto' } }, types: ['restaurant', 'food'], distanceMeters: 2100 } },
+    { placePrediction: { placeId: 'ChIJpaint', text: { text: 'Paint Store' }, structuredFormat: { mainText: { text: 'Paint Store' } }, types: ['hardware_store'] } },
+  ],
+}
 
 const overpassFixture = {
   elements: [
@@ -44,6 +61,10 @@ async function shot(page: Page, name: string) {
 
 async function main() {
   if (shots) mkdirSync(shots, { recursive: true })
+  const env = { ...process.env, VITE_SUPABASE_URL: '', VITE_GOOGLE_MAPS_API_KEY: PROVIDER === 'google' ? TEST_KEY : '' }
+  const build = spawnSync('npx', ['vite', 'build'], { env, stdio: 'inherit' })
+  if (build.status !== 0) process.exit(1)
+  console.log(`Testing with ${PROVIDER === 'google' ? 'Google Places' : 'OpenStreetMap'}`)
   const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'], { stdio: 'ignore' })
   await new Promise((r) => setTimeout(r, 2000))
 
@@ -56,8 +77,28 @@ async function main() {
     geolocation: HOME,
     permissions: ['geolocation'],
   })
+  const google = { nearby: 0, autocompleteTokens: new Set<string>(), details: [] as string[], badKey: false, badMask: false }
   await context.route(/overpass/, (route) => route.fulfill({ json: overpassFixture }))
   await context.route(/photon\.komoot\.io/, (route) => route.fulfill({ json: photonFixture }))
+  await context.route(/places\.googleapis\.com/, async (route) => {
+    const req = route.request()
+    const url = new URL(req.url())
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' } })
+    if (req.headers()['x-goog-api-key'] !== TEST_KEY) google.badKey = true
+    const cors = { 'access-control-allow-origin': '*' }
+    if (url.pathname.endsWith(':searchNearby')) {
+      google.nearby++
+      if (!req.headers()['x-goog-fieldmask']?.includes('places.displayName')) google.badMask = true
+      return route.fulfill({ json: googleNearbyFixture, headers: cors })
+    }
+    if (url.pathname.endsWith(':autocomplete')) {
+      google.autocompleteTokens.add(JSON.parse(req.postData() ?? '{}').sessionToken)
+      return route.fulfill({ json: googleAutocompleteFixture, headers: cors })
+    }
+    const id = url.pathname.split('/').pop()!
+    google.details.push(`${id}|${url.searchParams.get('sessionToken')}|${req.headers()['x-goog-fieldmask']}`)
+    return route.fulfill({ json: { id, location: { latitude: 43.6655, longitude: -79.4011 }, shortFormattedAddress: '2 Yonge Street' }, headers: cors })
+  })
   const page = await context.newPage()
   page.on('pageerror', (e) => {
     console.log(`FAIL  page error: ${e.message}`)
@@ -65,6 +106,7 @@ async function main() {
   })
   page.on('dialog', (d) => d.accept())
 
+  let nearbyCallsBeforeReload = 0
   try {
     // Sign in (demo)
     await page.goto(BASE)
@@ -76,7 +118,7 @@ async function main() {
     // Nearby
     await expectVisible(page, 'Pai Northern Thai', 'nearby restaurants load')
     await expectVisible(page, 'Thai · 18 Duncan Street', 'cuisine and address shown')
-    await expectVisible(page, 'Italian, Pizza', 'multi-cuisine formatted')
+    await expectVisible(page, PROVIDER === 'google' ? 'Italian Restaurant' : 'Italian, Pizza', 'cuisine formatted')
     await expectVisible(page, /^\d+ m$/, 'distance shown')
     await shot(page, '02-nearby')
 
@@ -135,9 +177,20 @@ async function main() {
 
     // Search
     await page.getByLabel('Search restaurants').fill('pai')
-    await expectVisible(page, 'Pai Uptown', 'search results from Photon')
+    await expectVisible(page, 'Pai Uptown', 'search results shown')
     await shot(page, '07-search')
-    await page.getByLabel('Search restaurants').fill('')
+    if (PROVIDER === 'google') {
+      const paint = await page.getByText('Paint Store').count()
+      if (paint) { console.log('FAIL  non-food suggestion filtered'); failures++ } else console.log('PASS  non-food suggestion filtered')
+      await page.getByRole('button', { name: /Pai Uptown/ }).click()
+      await expectVisible(page, '2 Yonge Street', 'search result opens with address from Place Details')
+      await page.getByRole('link', { name: 'Restaurants' }).click()
+      await page.getByLabel('Search restaurants').fill('pai')
+      await expectVisible(page, 'Pai Uptown', 'second search')
+      await page.getByLabel('Search restaurants').fill('')
+    } else {
+      await page.getByLabel('Search restaurants').fill('')
+    }
 
     // Deleting a visit
     await page.getByRole('button', { name: /Pai Northern Thai/ }).first().click()
@@ -155,6 +208,7 @@ async function main() {
     await page.getByRole('link', { name: 'Profile' }).click()
     await expectVisible(page, 'Got an invite code?', 'profile screen')
 
+    nearbyCallsBeforeReload = google.nearby
     // Survives a reload (deep link + saved data)
     await page.goto(BASE + '/')
     await expectVisible(page, '1 visit', 'data persists across reload')
@@ -177,6 +231,21 @@ async function main() {
     await p2.getByLabel('Your first name').fill('Test')
     await p2.getByRole('button', { name: 'Try the demo' }).click()
     await expectVisible(p2, 'Location is off', 'location denied message')
+    if (PROVIDER === 'google') {
+      const ok = (name: string, cond: boolean, detail?: unknown) => {
+        console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : `  -> ${JSON.stringify(detail)}`}`)
+        if (!cond) failures++
+      }
+      ok('Google key sent on every call', !google.badKey)
+      ok('Nearby asks only for the fields it needs', !google.badMask)
+      // In memory only: Google's terms don't allow storing place data, so a full reload calls again.
+      ok('Nearby results cached across screens (1 call)', nearbyCallsBeforeReload === 1, nearbyCallsBeforeReload)
+      const [detail] = google.details
+      ok('one Place Details call, Essentials fields only', google.details.length === 1 && detail.endsWith('|id,location,shortFormattedAddress'), google.details)
+      const firstToken = detail?.split('|')[1]
+      ok('Place Details closes the autocomplete session', !!firstToken && google.autocompleteTokens.has(firstToken), { details: google.details, tokens: [...google.autocompleteTokens] })
+      ok('a new search starts a new session', google.autocompleteTokens.size === 2, [...google.autocompleteTokens])
+    }
   } finally {
     await browser.close()
     server.kill()

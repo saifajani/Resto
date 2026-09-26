@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { backend } from '../lib/config'
 import { useLocation } from '../lib/location'
-import { formatDistance, nearbyPlaces, searchPlaces } from '../lib/places'
+import { formatDistance, nearbyPlaces, placesProvider, resolvePlace, searchPlaces } from '../lib/places'
 import type { Place, VisitedRestaurant } from '../lib/types'
 import { ErrorNote, Spinner, errorMessage, formatDate } from '../components/ui'
 
@@ -56,7 +56,7 @@ export default function Restaurants() {
   const open = async (place: Place) => {
     setOpening(place.id)
     try {
-      const restaurant = await backend.restaurantForPlace(place)
+      const restaurant = await backend.restaurantForPlace(await resolvePlace(place))
       navigate(`/r/${restaurant.id}`, { state: { restaurant } })
     } catch (e) {
       setError(errorMessage(e))
@@ -177,7 +177,11 @@ export default function Restaurants() {
         </>
       )}
       <p className="attribution">
-        Restaurant data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors
+        {placesProvider === 'google' ? (
+          'Places data from Google Maps'
+        ) : (
+          <>Restaurant data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors</>
+        )}
       </p>
     </>
   )

@@ -57,15 +57,16 @@ export type DraftDish = {
   notes: string
 }
 
-/** A restaurant from OpenStreetMap, before it has a record in our database. */
+/** A restaurant from the map provider, before it has a record in our database. */
 export type Place = {
-  /** "osm:node/123", "osm:way/456" or "osm:relation/789" */
+  /** Prefixed by source: "google:ChIJ...", or "osm:node/123" for OpenStreetMap */
   id: string
   name: string
   address: string | null
   cuisine: string | null
-  latitude: number
-  longitude: number
+  /** Null for search suggestions until resolvePlace() looks up the details. */
+  latitude: number | null
+  longitude: number | null
   distance: number | null
 }
 

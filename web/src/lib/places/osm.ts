@@ -1,4 +1,4 @@
-import type { Place } from './types'
+import type { Place } from '../types'
 
 /**
  * Restaurant lookup using OpenStreetMap, which is open data and free to query:
