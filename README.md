@@ -23,10 +23,10 @@ This assumes Claude Code, Node.js and the GitHub CLI are already set up, as they
 
 ### 1. Get the code and run the demo
 
-Put it next to your Schedule1 folder (use the same parent folder you keep Schedule1 in):
+Put it in your Code folder, next to Schedule1:
 
 ```sh
-cd ~/code            # wherever your schedule1 folder lives
+cd ~/Code
 gh repo clone saifajani/Resto resto
 cd resto
 git checkout claude/restaurant-meal-memory-app-azgvzk    # until it's merged to main

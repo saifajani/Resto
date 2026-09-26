@@ -138,7 +138,12 @@ async function main() {
     await page.getByText('Would order again').click()
     await page.getByLabel('Notes').last().fill('Ask for extra lime')
     await shot(page, '03-dish-editor')
-    await page.getByRole('button', { name: 'Done' }).click()
+    // The sheet should read as its own screen: near the top on a phone, with the action pinned at the bottom.
+    const sheetBox = await page.locator('.sheet').boundingBox()
+    const addBox = await page.getByRole('button', { name: 'Add dish', exact: true }).boundingBox()
+    if (sheetBox && sheetBox.y < 120 && addBox && addBox.y > 844 - 140) console.log('PASS  dish sheet is tall with its button at the bottom')
+    else { console.log(`FAIL  dish sheet layout ${JSON.stringify({ sheetBox, addBox })}`); failures++ }
+    await page.getByRole('button', { name: 'Add dish', exact: true }).click()
 
     await page.getByRole('button', { name: '+ Add a dish' }).click()
     await expectVisible(page, 'Sarah', 'next dish defaults to next person')
@@ -146,7 +151,7 @@ async function main() {
     if (sarahSelected !== 'Sarah') { console.log(`FAIL  expected Sarah preselected, got ${sarahSelected}`); failures++ }
     await page.getByLabel('Dish', { exact: true }).fill('Pad Thai')
     await page.getByRole('radio', { name: '3 stars' }).click()
-    await page.getByRole('button', { name: 'Done' }).click()
+    await page.getByRole('button', { name: 'Add dish', exact: true }).click()
     await page.getByPlaceholder('Anything worth remembering').fill('Friday night, 40 min wait')
     await shot(page, '04-log-visit')
     await page.getByRole('button', { name: /Save visit \(2 dishes\)/ }).click()
@@ -165,7 +170,7 @@ async function main() {
     await page.getByRole('button', { name: 'Khao Soi' }).click()
     await page.getByRole('radio', { name: '4 stars' }).click()
     await page.getByText('Would order again').click()
-    await page.getByRole('button', { name: 'Done' }).click()
+    await page.getByRole('button', { name: 'Add dish', exact: true }).click()
     await page.getByRole('button', { name: /Save visit \(1 dish\)/ }).click()
     await expectVisible(page, '×2', 'repeat dish counted twice')
     await expectVisible(page, 'Past visits', 'visit timeline')

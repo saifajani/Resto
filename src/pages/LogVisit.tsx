@@ -214,19 +214,18 @@ function DishEditor(props: {
   const valid = dish.name.trim().length > 0 && dish.rating >= 1
 
   return (
-    <Sheet title={props.dish.name ? 'Edit dish' : 'Add a dish'} onClose={props.onCancel}>
-      <div className="sheet-header">
-        <button className="link" onClick={props.onCancel}>Cancel</button>
-        <strong>{props.dish.name ? 'Edit dish' : 'Add a dish'}</strong>
-        <button
-          className="link strong"
-          disabled={!valid}
-          onClick={() => props.onSave({ ...dish, name: dish.name.trim(), notes: dish.notes.trim() })}
-        >
-          Done
-        </button>
-      </div>
-
+    <Sheet
+      title={props.dish.name ? 'Edit dish' : 'Add a dish'}
+      onClose={props.onCancel}
+      footer={
+        <>
+          <button className="primary wide" disabled={!valid} onClick={() => props.onSave({ ...dish, name: dish.name.trim(), notes: dish.notes.trim() })}>
+            {props.dish.name ? 'Save dish' : 'Add dish'}
+          </button>
+          {!valid && <span className="hint">{dish.name.trim() ? 'Tap a star rating to add it' : 'Enter a dish name and rating'}</span>}
+        </>
+      }
+    >
       <div className="field">
         <span>Who ate it</span>
         <div className="chips">

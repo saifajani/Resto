@@ -136,13 +136,15 @@ function InviteSheet({ invite, onClose }: { invite: Invite; onClose: () => void 
   }
 
   return (
-    <Sheet title={`Invite ${invite.personName}`} onClose={onClose}>
+    <Sheet
+      title={`Invite ${invite.personName}`}
+      onClose={onClose}
+      footer={<button className="primary wide" onClick={share}>{copied ? 'Copied to clipboard' : 'Send invite'}</button>}
+    >
       <div className="invite">
-        <h2>Invite {invite.personName}</h2>
+        <p className="muted">Send {invite.personName} this code:</p>
         <div className="invite-code">{invite.code}</div>
-        <p className="muted">When {invite.personName} enters this code in Resto, they'll see every visit you've logged with them.</p>
-        <button className="primary wide" onClick={share}>{copied ? 'Copied to clipboard' : 'Send invite'}</button>
-        <button className="link" onClick={onClose}>Done</button>
+        <p className="muted">When {invite.personName} enters it in Resto, they'll see every visit you've logged with them.</p>
       </div>
     </Sheet>
   )

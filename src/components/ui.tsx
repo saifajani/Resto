@@ -38,7 +38,22 @@ export function ReorderBadge({ yes }: { yes: boolean }) {
   )
 }
 
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+/**
+ * A panel that slides up over the page: nearly full height on phones, a
+ * centred dialog on wider screens. The primary action goes in `footer`, pinned
+ * to the bottom like the Save button on full pages.
+ */
+export function Sheet({
+  title,
+  onClose,
+  children,
+  footer,
+}: {
+  title: string
+  onClose: () => void
+  children: ReactNode
+  footer?: ReactNode
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -51,7 +66,15 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
-        {children}
+        <div className="sheet-grabber" aria-hidden="true" />
+        <div className="sheet-header">
+          <h2 className="sheet-title">{title}</h2>
+          <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <div className="sheet-body">{children}</div>
+        {footer && <div className="sheet-footer">{footer}</div>}
       </div>
     </div>
   )
