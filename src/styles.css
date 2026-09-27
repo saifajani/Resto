@@ -601,7 +601,8 @@ button.row:active {
 .fine-print {
   font-size: 13px;
   color: var(--muted);
-  margin: 8px 0 12px;
+  /* Top and bottom only, so .padded can still set the sides. */
+  margin-block: 8px 12px;
 }
 
 .save-bar {
