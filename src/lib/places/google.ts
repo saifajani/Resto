@@ -76,11 +76,12 @@ export function createGooglePlaces(apiKey: string) {
   }
 
   return {
-    async nearby(lat: number, lon: number, radius = NEARBY_RADIUS, signal?: AbortSignal): Promise<Place[]> {
+    /** `force` is a deliberate refresh by the user, which skips the cache. */
+    async nearby(lat: number, lon: number, radius = NEARBY_RADIUS, signal?: AbortSignal, force = false): Promise<Place[]> {
       // About 110 m cells, so small moves reuse the last answer.
       const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)},${radius}`
       const cached = nearbyCache.get(cacheKey)
-      if (cached && Date.now() - cached.at < CACHE_MINUTES * 60_000) return cached.places
+      if (!force && cached && Date.now() - cached.at < CACHE_MINUTES * 60_000) return cached.places
 
       const json = await call<{ places?: GooglePlace[] }>(
         fetch(`${BASE}/places:searchNearby`, {

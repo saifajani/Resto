@@ -148,10 +148,11 @@ async function main() {
   })
   const google = { nearby: 0, autocompleteTokens: new Set<string>(), details: [] as string[], badKey: false, badMask: false, nearbyRadius: 0 }
   // The query is form-encoded, so "around:5000" arrives as "around%3A5000".
-  const overpass = { radius: 0 }
+  const overpass = { radius: 0, calls: 0 }
   await context.route(/overpass/, (route) => {
     const query = decodeURIComponent(route.request().postData() ?? '')
     overpass.radius = Number(/around:(\d+)/.exec(query)?.[1] ?? 0)
+    overpass.calls++
     return route.fulfill({ json: overpassFixture })
   })
   await context.route(/photon\.komoot\.io/, (route) => route.fulfill({ json: photonFixture }))
@@ -340,6 +341,36 @@ async function main() {
     await expectTheme(page, 'light', 'back to Automatic follows the system again')
 
     nearbyCallsBeforeReload = google.nearby
+
+    // Pull down to refresh, the gesture an installed app has no chrome for.
+    // Back to the list first: the handler only lives on the Restaurants page.
+    await page.getByRole('link', { name: 'Restaurants' }).click()
+    await expectVisible(page, 'Cafe Landwer', 'back on the nearby list')
+    // The gesture goes in as source text: tsx's esbuild rewrites named inner
+    // functions and the browser then trips over its missing __name helper.
+    const pull = (ys: number[]) => `(async () => {
+      document.scrollingElement.scrollTop = 0
+      const at = (y) => [new Touch({ identifier: 1, target: document.body, clientX: 180, clientY: y })]
+      const fire = (type, y) => document.dispatchEvent(new TouchEvent(type, {
+        bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : at(y), changedTouches: at(y),
+      }))
+      fire('touchstart', ${ys[0]})
+      for (const y of ${JSON.stringify(ys.slice(1))}) { fire('touchmove', y); await new Promise((r) => setTimeout(r, 20)) }
+      fire('touchend', ${ys[ys.length - 1]})
+    })()`
+    const nearbyCalls = () => (PROVIDER === 'google' ? google.nearby : overpass.calls)
+    await page.waitForTimeout(300)
+    const before = nearbyCalls()
+    await page.evaluate(pull([40, 80, 140, 200]))
+    // The indicator stays up until the refresh finishes, so wait it out.
+    await page.waitForFunction("!document.querySelector('.pull-refresh')", undefined, { timeout: 5000 }).catch(() => {})
+    ok('pulling down refetches the nearby list', nearbyCalls() === before + 1, { before, after: nearbyCalls() })
+    ok('the refreshed list is still there', (await nearbyTitles()).length > 0)
+
+    // A short tug is a scroll, not a refresh.
+    const beforeTug = nearbyCalls()
+    await page.evaluate(pull([40, 55]))
+    ok('a small tug does not refresh', nearbyCalls() === beforeTug, nearbyCalls())
     // Survives a reload (deep link + saved data)
     await page.goto(BASE + '/')
     await expectVisible(page, '1 visit', 'data persists across reload')

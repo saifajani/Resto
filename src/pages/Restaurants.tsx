@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { backend } from '../lib/config'
-import { useLocation } from '../lib/location'
+import { useLocation, type Coords } from '../lib/location'
 import { formatDistance, nearbyPlaces, placesProvider, resolvePlace, searchPlaces } from '../lib/places'
 import type { Place, VisitedRestaurant } from '../lib/types'
 import { ErrorNote, Spinner, VisitedMark } from '../components/ui'
 import { errorMessage, formatDate } from '../lib/format'
+import { usePullToRefresh } from '../lib/usePullToRefresh'
 
 /** How many nearby places to show before the "Show more" button. */
 const NEARBY_PAGE = 8
@@ -39,20 +40,42 @@ export default function Restaurants() {
     return map
   }, [mine])
 
+  const loadVisited = useCallback(
+    () => backend.visitedRestaurants().then(setMine, (e: unknown) => setError(errorMessage(e))),
+    [],
+  )
   useEffect(() => {
-    backend.visitedRestaurants().then(setMine, (e) => setError(errorMessage(e)))
+    void loadVisited()
+  }, [loadVisited])
+
+  const nearbyRequest = useRef<AbortController | null>(null)
+  const loadNearby = useCallback(async (at: Coords, force = false) => {
+    nearbyRequest.current?.abort()
+    const controller = new AbortController()
+    nearbyRequest.current = controller
+    setNearbyFailed(false)
+    setShown(NEARBY_PAGE)
+    try {
+      const places = await nearbyPlaces(at.latitude, at.longitude, controller.signal, force)
+      if (!controller.signal.aborted) setNearby(places)
+    } catch {
+      if (!controller.signal.aborted) setNearbyFailed(true)
+    }
   }, [])
 
   useEffect(() => {
     if (!coords) return
-    const controller = new AbortController()
-    setNearbyFailed(false)
-    setShown(NEARBY_PAGE)
-    nearbyPlaces(coords.latitude, coords.longitude, controller.signal).then(setNearby, () => {
-      if (!controller.signal.aborted) setNearbyFailed(true)
-    })
-    return () => controller.abort()
-  }, [coords])
+    void loadNearby(coords)
+    return () => nearbyRequest.current?.abort()
+  }, [coords, loadNearby])
+
+  /** What both the Refresh button and the pull-down gesture do. */
+  const reload = useCallback(async () => {
+    refresh()
+    await Promise.all([loadVisited(), coords ? loadNearby(coords, true) : Promise.resolve()])
+  }, [coords, loadNearby, loadVisited, refresh])
+
+  const { pull, refreshing, ready } = usePullToRefresh(reload)
 
   useEffect(() => {
     if (!trimmed) {
@@ -126,6 +149,15 @@ export default function Restaurants() {
 
   return (
     <>
+      {(pull > 0 || refreshing) && (
+        <div
+          className={`pull-refresh${ready || refreshing ? ' ready' : ''}`}
+          style={{ transform: `translateY(${pull}px)`, opacity: Math.min(pull / 24, 1) }}
+          aria-hidden={!refreshing}
+        >
+          <div className="spinner" aria-label={refreshing ? 'Refreshing' : undefined} />
+        </div>
+      )}
       <header className="page-header">
         <h1>Restaurants</h1>
       </header>
@@ -178,7 +210,7 @@ export default function Restaurants() {
               <h2>
                 Nearby
                 {coords && (
-                  <button className="link small" onClick={refresh}>Refresh</button>
+                  <button className="link small" onClick={reload}>Refresh</button>
                 )}
               </h2>
               {nearbyFailed ? (

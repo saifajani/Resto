@@ -367,6 +367,33 @@ button.row:active {
   stroke-width: 1.8;
 }
 
+/* Pull down to refresh: sits above the header, follows the finger. */
+.pull-refresh {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 4px);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 20;
+  transition: opacity 0.15s ease;
+}
+
+.pull-refresh .spinner {
+  background: var(--surface);
+  box-shadow: 0 1px 6px rgb(0 0 0 / 15%);
+  padding: 6px;
+  box-sizing: content-box;
+  border-radius: 50%;
+  animation-play-state: paused;
+}
+
+/* Far enough to count, so the spinner starts turning. */
+.pull-refresh.ready .spinner {
+  animation-play-state: running;
+}
+
 /* The last row of the nearby card, revealing the next few places. */
 .row.show-more {
   justify-content: center;

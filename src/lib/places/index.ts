@@ -13,9 +13,12 @@ const google = googleKey && !googleKey.startsWith('your-') ? createGooglePlaces(
 
 export const placesProvider: 'google' | 'osm' = google ? 'google' : 'osm'
 
-/** Each provider picks its own radius: see the note by NEARBY_RADIUS in both. */
-export function nearbyPlaces(lat: number, lon: number, signal?: AbortSignal): Promise<Place[]> {
-  return google ? google.nearby(lat, lon, undefined, signal) : osmNearby(lat, lon, undefined, signal)
+/**
+ * Each provider picks its own radius: see the note by NEARBY_RADIUS in both.
+ * `force` is set when the user asks for a refresh, and skips Google's cache.
+ */
+export function nearbyPlaces(lat: number, lon: number, signal?: AbortSignal, force = false): Promise<Place[]> {
+  return google ? google.nearby(lat, lon, undefined, signal, force) : osmNearby(lat, lon, undefined, signal)
 }
 
 export function searchPlaces(text: string, near: { latitude: number; longitude: number } | null, signal?: AbortSignal): Promise<Place[]> {
