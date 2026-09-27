@@ -117,12 +117,15 @@ export default function RestaurantPage() {
             const people = visitPeople(visit)
             const personById = new Map(people.map((p) => [p.id, p]))
             const mine = visit.owner_id === userId
+            // You see the date of a visit you logged or were on. For the rest,
+            // the circle shares what was ordered, not when they went.
+            const wasThere = mine || people.some((p) => p.linked_user_id === userId)
             const dishes = [...visit.dishes].sort((a, b) => a.created_at.localeCompare(b.created_at))
             return (
               <section key={visit.id} className="card visit">
                 <div className="visit-header">
                   <div>
-                    <div className="visit-date">{formatDate(visit.visited_at)}</div>
+                    <div className="visit-date">{wasThere ? formatDate(visit.visited_at) : 'Earlier visit'}</div>
                     <div className="muted small">
                       {people.map((p) => displayName(p, userId)).join(', ')}
                       {!mine && visit.owner && <> · logged by {visit.owner.display_name}</>}

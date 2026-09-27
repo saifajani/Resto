@@ -96,16 +96,46 @@ describe('knownDishNames', () => {
 })
 
 describe('groupVisitedRestaurants', () => {
+  const r = (id: string): Restaurant => ({ id, place_id: null, name: id, address: null, latitude: null, longitude: null })
+  const withMe = [{ person: me }, { person: sarah }]
+  const withoutMe = [{ person: sarah }]
+
   it('counts visits per restaurant and keeps the latest date', () => {
-    const r = (id: string): Restaurant => ({ id, place_id: null, name: id, address: null, latitude: null, longitude: null })
-    const grouped = groupVisitedRestaurants([
-      { visited_at: '2026-09-20', restaurant: r('a') },
-      { visited_at: '2026-09-10', restaurant: r('b') },
-      { visited_at: '2026-08-01', restaurant: r('a') },
-    ])
+    const grouped = groupVisitedRestaurants(
+      [
+        { visited_at: '2026-09-20', restaurant: r('a'), visit_people: withMe },
+        { visited_at: '2026-09-10', restaurant: r('b'), visit_people: withMe },
+        { visited_at: '2026-08-01', restaurant: r('a'), visit_people: withMe },
+      ],
+      ME,
+    )
     expect(grouped).toEqual([
-      { restaurant: r('a'), lastVisit: '2026-09-20', visitCount: 2 },
-      { restaurant: r('b'), lastVisit: '2026-09-10', visitCount: 1 },
+      { restaurant: r('a'), lastVisit: '2026-09-20', myLastVisit: '2026-09-20', visitCount: 2, visitedByCircle: false },
+      { restaurant: r('b'), lastVisit: '2026-09-10', myLastVisit: '2026-09-10', visitCount: 1, visitedByCircle: false },
     ])
+  })
+
+  it('marks a restaurant only your circle went to', () => {
+    const [a] = groupVisitedRestaurants([{ visited_at: '2026-09-20', restaurant: r('a'), visit_people: withoutMe }], ME)
+    expect(a.myLastVisit).toBe(null)
+    expect(a.visitedByCircle).toBe(true)
+  })
+
+  it('dates the list by your own latest visit, never someone else\'s', () => {
+    const [a] = groupVisitedRestaurants(
+      [
+        { visited_at: '2026-09-20', restaurant: r('a'), visit_people: withoutMe },
+        { visited_at: '2026-08-01', restaurant: r('a'), visit_people: withMe },
+      ],
+      ME,
+    )
+    expect(a.myLastVisit).toBe('2026-08-01')
+    expect(a.lastVisit).toBe('2026-09-20')
+    expect(a.visitedByCircle).toBe(true)
+  })
+
+  it('treats a visit with nobody on it as not yours', () => {
+    const [a] = groupVisitedRestaurants([{ visited_at: '2026-09-20', restaurant: r('a'), visit_people: [] }], ME)
+    expect(a.myLastVisit).toBe(null)
   })
 })

@@ -47,6 +47,10 @@ export type VisitedRestaurant = {
   restaurant: Restaurant
   lastVisit: string
   visitCount: number
+  /** The newest visit you were on yourself, or null if you've never been. */
+  myLastVisit: string | null
+  /** Someone in your circle was here on a visit you weren't on. */
+  visitedByCircle: boolean
 }
 
 /** A dish being entered on the log visit screen, before it's saved. */

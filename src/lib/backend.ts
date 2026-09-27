@@ -39,13 +39,40 @@ export interface Backend {
   setDisplayName(name: string): Promise<void>
 }
 
-/** Collapses a newest-first list of visits into one entry per restaurant. */
-export function groupVisitedRestaurants(rows: { visited_at: string; restaurant: Restaurant }[]): VisitedRestaurant[] {
+/** A visit as the restaurant list needs it: when, where, and who was there. */
+export type VisitedRow = {
+  visited_at: string
+  restaurant: Restaurant
+  /** Every person on the visit. The one standing for you has linked_user_id = your id. */
+  visit_people: { person: { linked_user_id: string | null } | null }[]
+}
+
+/**
+ * Collapses a newest-first list of visits into one entry per restaurant, and
+ * works out whether you were there yourself or only someone else in your
+ * circle was. Attendance, not who logged it: a visit you recorded for other
+ * people is one you haven't been on. Dates of visits you weren't on are not
+ * shown, so `myLastVisit` is the only date the list can print.
+ */
+export function groupVisitedRestaurants(rows: VisitedRow[], userId: string): VisitedRestaurant[] {
   const byId = new Map<string, VisitedRestaurant>()
   for (const row of rows) {
+    const wasThere = row.visit_people.some((vp) => vp.person?.linked_user_id === userId)
     const existing = byId.get(row.restaurant.id)
-    if (existing) existing.visitCount += 1
-    else byId.set(row.restaurant.id, { restaurant: row.restaurant, lastVisit: row.visited_at, visitCount: 1 })
+    if (existing) {
+      existing.visitCount += 1
+      // Rows are newest first, so the first one you were on is your latest.
+      if (wasThere) existing.myLastVisit ??= row.visited_at
+      existing.visitedByCircle ||= !wasThere
+    } else {
+      byId.set(row.restaurant.id, {
+        restaurant: row.restaurant,
+        lastVisit: row.visited_at,
+        visitCount: 1,
+        myLastVisit: wasThere ? row.visited_at : null,
+        visitedByCircle: !wasThere,
+      })
+    }
   }
   return [...byId.values()]
 }

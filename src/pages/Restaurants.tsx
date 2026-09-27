@@ -4,8 +4,14 @@ import { backend } from '../lib/config'
 import { useLocation } from '../lib/location'
 import { formatDistance, nearbyPlaces, placesProvider, resolvePlace, searchPlaces } from '../lib/places'
 import type { Place, VisitedRestaurant } from '../lib/types'
-import { ErrorNote, Spinner } from '../components/ui'
+import { ErrorNote, Spinner, VisitedMark } from '../components/ui'
 import { errorMessage, formatDate } from '../lib/format'
+
+/** How many nearby places to show before the "Show more" button. */
+const NEARBY_PAGE = 8
+
+/** Nearest first, with anything missing a distance last. */
+const byDistance = (a: Place, b: Place) => (a.distance ?? Infinity) - (b.distance ?? Infinity)
 
 export default function Restaurants() {
   const navigate = useNavigate()
@@ -13,6 +19,7 @@ export default function Restaurants() {
   const [mine, setMine] = useState<VisitedRestaurant[]>([])
   const [nearby, setNearby] = useState<Place[] | null>(null)
   const [nearbyFailed, setNearbyFailed] = useState(false)
+  const [shown, setShown] = useState(NEARBY_PAGE)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Place[] | null>(null)
   const [searching, setSearching] = useState(false)
@@ -20,7 +27,16 @@ export default function Restaurants() {
   const [error, setError] = useState<string | null>(null)
 
   const trimmed = query.trim()
-  const visitedPlaceIds = useMemo(() => new Set(mine.map((m) => m.restaurant.place_id)), [mine])
+  /** place id -> whether you were there yourself, or only someone else in your circle. */
+  const visitedPlaces = useMemo(() => {
+    const map = new Map<string, 'me' | 'circle'>()
+    for (const m of mine) {
+      if (!m.restaurant.place_id) continue
+      if (m.myLastVisit) map.set(m.restaurant.place_id, 'me')
+      else if (m.visitedByCircle && !map.has(m.restaurant.place_id)) map.set(m.restaurant.place_id, 'circle')
+    }
+    return map
+  }, [mine])
 
   useEffect(() => {
     backend.visitedRestaurants().then(setMine, (e) => setError(errorMessage(e)))
@@ -30,6 +46,7 @@ export default function Restaurants() {
     if (!coords) return
     const controller = new AbortController()
     setNearbyFailed(false)
+    setShown(NEARBY_PAGE)
     nearbyPlaces(coords.latitude, coords.longitude, 800, controller.signal).then(setNearby, () => {
       if (!controller.signal.aborted) setNearbyFailed(true)
     })
@@ -71,7 +88,7 @@ export default function Restaurants() {
         <div className="row-main">
           <div className="row-title">
             {place.name}
-            {visitedPlaceIds.has(place.id) && <span className="been" title="You've been here">✓</span>}
+            {visitedPlaces.has(place.id) && <VisitedMark who={visitedPlaces.get(place.id)!} />}
           </div>
           <div className="row-sub">{[place.cuisine, place.address].filter(Boolean).join(' · ')}</div>
         </div>
@@ -86,7 +103,8 @@ export default function Restaurants() {
         <div className="row-main">
           <div className="row-title">{v.restaurant.name}</div>
           <div className="row-sub">
-            {v.visitCount} visit{v.visitCount === 1 ? '' : 's'} · last {formatDate(v.lastVisit)}
+            {v.visitCount} visit{v.visitCount === 1 ? '' : 's'}
+            {v.myLastVisit ? ` · last ${formatDate(v.myLastVisit)}` : ' · from your circle'}
           </div>
         </div>
         <span className="chevron" aria-hidden="true">›</span>
@@ -94,8 +112,8 @@ export default function Restaurants() {
     </li>
   )
 
-  const beenHere = (nearby ?? []).filter((p) => visitedPlaceIds.has(p.id))
-  const others = (nearby ?? []).filter((p) => !visitedPlaceIds.has(p.id))
+  const beenHere = (nearby ?? []).filter((p) => visitedPlaces.has(p.id)).sort(byDistance)
+  const others = (nearby ?? []).filter((p) => !visitedPlaces.has(p.id)).sort(byDistance)
   const myMatches = mine.filter((m) => m.restaurant.name.toLowerCase().includes(trimmed.toLowerCase()))
 
   return (
@@ -165,7 +183,16 @@ export default function Restaurants() {
               ) : others.length === 0 ? (
                 <p className="list-empty">No restaurants found within 800 m.</p>
               ) : (
-                <ul className="list">{others.map(placeRow)}</ul>
+                <ul className="list">
+                  {others.slice(0, shown).map(placeRow)}
+                  {others.length > shown && (
+                    <li>
+                      <button className="row show-more" onClick={() => setShown((n) => n + NEARBY_PAGE)}>
+                        Show more
+                      </button>
+                    </li>
+                  )}
+                </ul>
               )}
             </section>
           )}

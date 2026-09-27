@@ -156,9 +156,10 @@ export function createDemoBackend(): Backend {
     async visitedRestaurants() {
       const rows = [...store.visits].sort(newestFirst).flatMap((v) => {
         const restaurant = store.restaurants.find((r) => r.id === v.restaurant_id)
-        return restaurant ? [{ visited_at: v.visited_at, restaurant }] : []
+        if (!restaurant) return []
+        return [{ visited_at: v.visited_at, restaurant, visit_people: toVisit(v).visit_people }]
       })
-      return groupVisitedRestaurants(rows)
+      return groupVisitedRestaurants(rows, me())
     },
 
     async visits(restaurantId) {

@@ -10,6 +10,13 @@ DIR=${TEST_DB_DIR:-/var/tmp/resto-test-db}
 PORT=5499
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
+# A previous pair would otherwise keep port 3900 and keep answering from the old
+# data, so a rerun looked like a reset while the tests still saw last run's rows.
+if [ -f "$DIR/postgrest.pid" ]; then kill "$(cat "$DIR/postgrest.pid")" 2>/dev/null || true; fi
+if [ -d "$DIR/data" ]; then "$PGBIN/pg_ctl" -D "$DIR/data" -m immediate stop >/dev/null 2>&1 || true; fi
+pkill -f "postgrest $DIR/postgrest.conf" 2>/dev/null || true
+pkill -f "postgres -D $DIR/data" 2>/dev/null || true
+
 rm -rf "$DIR" && mkdir -p "$DIR"
 "$PGBIN/initdb" -D "$DIR/data" -A trust -U postgres >/dev/null
 "$PGBIN/pg_ctl" -D "$DIR/data" -o "-k $DIR -p $PORT -c listen_addresses=" -l "$DIR/pg.log" start >/dev/null
@@ -50,7 +57,9 @@ grant select, insert, update, delete on storage.objects to authenticated;
 alter default privileges in schema public grant all on tables to anon, authenticated;
 SQL
 for migration in "$ROOT"/supabase/migrations/*.sql; do $PSQL -d resto -f "$migration"; done
-$PSQL -d resto -c "insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111'), ('22222222-2222-2222-2222-222222222222'), ('33333333-3333-3333-3333-333333333333')"
+# The fourth is an outsider who never joins a circle, so the "sees nothing"
+# checks stay honest now that joining a circle shares everything in it.
+$PSQL -d resto -c "insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111'), ('22222222-2222-2222-2222-222222222222'), ('33333333-3333-3333-3333-333333333333'), ('44444444-4444-4444-4444-444444444444')"
 
 cat > "$DIR/postgrest.conf" <<CONF
 db-uri = "postgres://authenticator:authenticator@/resto?host=$DIR&port=$PORT"

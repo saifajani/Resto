@@ -15,12 +15,34 @@ const HOME = { latitude: 43.6487, longitude: -79.3854 } // downtown Toronto
 const PROVIDER = process.env.PLACES === 'osm' ? 'osm' : 'google'
 const TEST_KEY = 'test-browser-key'
 
+/**
+ * Ten places, in no particular order, so the list has to sort them by distance
+ * and has more than one page of them. Distances from HOME run about 40 m
+ * (Cafe Landwer) to 850 m (Terroni).
+ */
+const NEARBY_FIXTURE = [
+  { key: 'terroni', name: 'Terroni', address: null, type: 'Italian Restaurant', cuisine: 'italian;pizza', lat: 43.6455, lon: -79.395 },
+  { key: 'landwer', name: 'Cafe Landwer', address: '20 Bay Street', type: 'Cafe', cuisine: 'cafe', lat: 43.6487, lon: -79.3849 },
+  { key: 'richmond', name: 'Richmond Station', address: '1 Richmond Street West', type: 'Regional', cuisine: 'regional', lat: 43.6516, lon: -79.3792 },
+  { key: 'byblos', name: 'Byblos', address: '11 Duncan Street', type: 'Mediterranean', cuisine: 'mediterranean', lat: 43.6487, lon: -79.3842 },
+  { key: 'pai', name: 'Pai Northern Thai', address: '18 Duncan Street', type: 'Thai', cuisine: 'thai', lat: 43.6479, lon: -79.3888 },
+  { key: 'canoe', name: 'Canoe', address: '66 Wellington Street West', type: 'Canadian', cuisine: 'canadian', lat: 43.6487, lon: -79.392 },
+  { key: 'kinka', name: 'Kinka Izakaya', address: '398 Church Street', type: 'Japanese', cuisine: 'japanese', lat: 43.6487, lon: -79.383 },
+  { key: 'raval', name: 'Bar Raval', address: '505 College Street', type: 'Tapas', cuisine: 'tapas', lat: 43.6487, lon: -79.395 },
+  { key: 'alo', name: 'Alo', address: '163 Spadina Avenue', type: 'French', cuisine: 'french', lat: 43.6487, lon: -79.39 },
+  { key: 'momofuku', name: 'Momofuku', address: '190 University Avenue', type: 'Asian', cuisine: 'asian', lat: 43.6487, lon: -79.3945 },
+]
+/** Nearest first, as the screen should end up showing them. */
+const BY_DISTANCE = ['Cafe Landwer', 'Byblos', 'Kinka Izakaya', 'Pai Northern Thai', 'Alo', 'Canoe', 'Richmond Station', 'Momofuku', 'Bar Raval', 'Terroni']
+
 const googleNearbyFixture = {
-  places: [
-    { id: 'ChIJpai', displayName: { text: 'Pai Northern Thai' }, shortFormattedAddress: '18 Duncan Street', location: { latitude: 43.6479, longitude: -79.3888 }, primaryTypeDisplayName: { text: 'Thai' } },
-    { id: 'ChIJrichmond', displayName: { text: 'Richmond Station' }, shortFormattedAddress: '1 Richmond Street West', location: { latitude: 43.6516, longitude: -79.3792 }, primaryTypeDisplayName: { text: 'Regional' } },
-    { id: 'ChIJterroni', displayName: { text: 'Terroni' }, location: { latitude: 43.6455, longitude: -79.395 }, primaryTypeDisplayName: { text: 'Italian Restaurant' } },
-  ],
+  places: NEARBY_FIXTURE.map((p) => ({
+    id: `ChIJ${p.key}`,
+    displayName: { text: p.name },
+    ...(p.address ? { shortFormattedAddress: p.address } : {}),
+    location: { latitude: p.lat, longitude: p.lon },
+    primaryTypeDisplayName: { text: p.type },
+  })),
 }
 const googleAutocompleteFixture = {
   suggestions: [
@@ -32,10 +54,19 @@ const googleAutocompleteFixture = {
 
 const overpassFixture = {
   elements: [
-    { type: 'node', id: 1001, lat: 43.6479, lon: -79.3888, tags: { name: 'Pai Northern Thai', amenity: 'restaurant', cuisine: 'thai', 'addr:housenumber': '18', 'addr:street': 'Duncan Street' } },
-    { type: 'way', id: 2002, center: { lat: 43.6516, lon: -79.3792 }, tags: { name: 'Richmond Station', amenity: 'restaurant', cuisine: 'regional', 'addr:housenumber': '1', 'addr:street': 'Richmond Street West' } },
-    { type: 'node', id: 3003, lat: 43.6455, lon: -79.3950, tags: { name: 'Terroni', amenity: 'restaurant', cuisine: 'italian;pizza' } },
-    { type: 'node', id: 4004, lat: 43.6490, lon: -79.3860, tags: { amenity: 'cafe' } },
+    ...NEARBY_FIXTURE.map((p, i) => ({
+      type: p.key === 'richmond' ? ('way' as const) : ('node' as const),
+      id: 1001 + i,
+      ...(p.key === 'richmond' ? { center: { lat: p.lat, lon: p.lon } } : { lat: p.lat, lon: p.lon }),
+      tags: {
+        name: p.name,
+        amenity: p.key === 'landwer' ? 'cafe' : 'restaurant',
+        cuisine: p.cuisine,
+        ...(p.address ? { 'addr:housenumber': p.address.split(' ')[0], 'addr:street': p.address.split(' ').slice(1).join(' ') } : {}),
+      },
+    })),
+    // No name, so it should never reach the list.
+    { type: 'node' as const, id: 4004, lat: 43.649, lon: -79.386, tags: { amenity: 'cafe' } },
   ],
 }
 const photonFixture = {
@@ -76,6 +107,10 @@ async function expectVisible(page: Page, text: string | RegExp, label = String(t
     console.log(`FAIL  ${label}`)
     failures++
   }
+}
+function ok(name: string, cond: boolean, detail?: unknown) {
+  console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : `  -> ${JSON.stringify(detail)}`}`)
+  if (!cond) failures++
 }
 async function shot(page: Page, name: string) {
   if (shots) await page.screenshot({ path: `${shots}/${name}.png` })
@@ -152,9 +187,17 @@ async function main() {
     // Nearby
     await expectVisible(page, 'Pai Northern Thai', 'nearby restaurants load')
     await expectVisible(page, 'Thai · 18 Duncan Street', 'cuisine and address shown')
-    await expectVisible(page, PROVIDER === 'google' ? 'Italian Restaurant' : 'Italian, Pizza', 'cuisine formatted')
     await expectVisible(page, /^\d+ m$/, 'distance shown')
+    const nearbyTitles = () => page.locator('.row-title').allTextContents()
+    const firstPage = await nearbyTitles()
+    ok('nearby shows eight places, nearest first', firstPage.join() === BY_DISTANCE.slice(0, 8).join(), firstPage)
     await shot(page, '02-nearby')
+    await page.getByRole('button', { name: 'Show more' }).click()
+    ok('Show more reveals the rest, still by distance', (await nearbyTitles()).join() === BY_DISTANCE.join(), await nearbyTitles())
+    ok('Show more goes away at the end of the list', (await page.getByRole('button', { name: 'Show more' }).count()) === 0)
+    // Terroni is the farthest, so it only appears once the list is expanded.
+    await expectVisible(page, PROVIDER === 'google' ? 'Italian Restaurant' : 'Italian, Pizza', 'cuisine formatted')
+    await shot(page, '02b-nearby-expanded')
 
     // First visit
     await page.getByRole('button', { name: /Pai Northern Thai/ }).click()
@@ -232,6 +275,8 @@ async function main() {
     // Back to list: marked as visited
     await page.getByRole('link', { name: 'Restaurants' }).click()
     await expectVisible(page, "You've been here", 'visited place pinned in nearby')
+    ok('visited row carries the filled mark', (await page.getByRole('img', { name: "You've been here" }).count()) === 1)
+    ok('a place nobody has been to has no mark', (await page.getByRole('img', { name: /has been here/ }).count()) === 0)
     await expectVisible(page, '2 visits', 'your restaurants shows visit count')
     await shot(page, '06-nearby-visited')
 
@@ -304,10 +349,6 @@ async function main() {
     await p2.getByRole('button', { name: 'Try the demo' }).click()
     await expectVisible(p2, 'Location is off', 'location denied message')
     if (PROVIDER === 'google') {
-      const ok = (name: string, cond: boolean, detail?: unknown) => {
-        console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : `  -> ${JSON.stringify(detail)}`}`)
-        if (!cond) failures++
-      }
       ok('Google key sent on every call', !google.badKey)
       ok('Nearby asks only for the fields it needs', !google.badMask)
       // In memory only: Google's terms don't allow storing place data, so a full reload calls again.

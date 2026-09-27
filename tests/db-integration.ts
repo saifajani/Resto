@@ -18,6 +18,8 @@ import type { Place } from '../src/lib/types'
 const OWNER = '11111111-1111-1111-1111-111111111111'
 const WIFE = '22222222-2222-2222-2222-222222222222'
 const STRANGER = '33333333-3333-3333-3333-333333333333'
+/** Never joins a circle, so nothing should ever be visible to them. */
+const OUTSIDER = '44444444-4444-4444-4444-444444444444'
 
 const postgrestUrl = process.env.TEST_POSTGREST_URL ?? 'http://127.0.0.1:3900'
 const secret = process.env.TEST_JWT_SECRET ?? 'test-secret-test-secret-test-secret-1234'
@@ -161,6 +163,7 @@ async function main() {
   const owner = backendFor(proxy.url, OWNER)
   const wife = backendFor(proxy.url, WIFE)
   const stranger = backendFor(proxy.url, STRANGER)
+  const outsider = backendFor(proxy.url, OUTSIDER)
 
   try {
     // Owner setup
@@ -231,11 +234,19 @@ async function main() {
     const linked = await wife.claimInvite(code.toLowerCase())
     check('wife claims invite as Sarah', linked.name === 'Sarah' && linked.linked_user_id === WIFE)
     const wifeVisits = await wife.visits(r1.id)
-    check('wife sees only the visit Sarah was on', wifeVisits.length === 1 && wifeVisits[0].notes === 'Busy Friday', wifeVisits.map((v) => v.notes))
-    check('wife sees every dish on that visit', wifeVisits[0].dishes.length === 2)
+    check('wife sees every visit the owner logged, not just hers', wifeVisits.length === 2, wifeVisits.map((v) => v.notes))
+    check('wife sees the dishes on a visit she was not on', wifeVisits[0].dishes.length === 2 && wifeVisits[0].notes === null, wifeVisits[0])
     check('wife sees who logged it', wifeVisits[0].owner?.display_name === 'Saif')
-    check('wife sees names of everyone on the visit', wifeVisits[0].visit_people.every((vp) => vp.person !== null))
-    check('restaurant shows in wife\'s list', (await wife.visitedRestaurants()).length === 1)
+    check('wife sees names of everyone on the visit, including Zayn', wifeVisits[0].visit_people.every((vp) => vp.person !== null), wifeVisits[0].visit_people)
+    const wifeVisited = await wife.visitedRestaurants()
+    check('restaurant shows in wife\'s list', wifeVisited.length === 1)
+    check(
+      'wife counts both visits but is only dated by her own',
+      wifeVisited[0].visitCount === 2 &&
+        new Date(wifeVisited[0].myLastVisit!).toISOString() === '2026-08-01T23:00:00.000Z' &&
+        wifeVisited[0].visitedByCircle,
+      wifeVisited[0],
+    )
     const circles = await wife.circlesImIn()
     check('circlesImIn shows owner name', circles.length === 1 && circles[0].owner?.display_name === 'Saif', circles)
     await wife.deleteVisit(wifeVisits[0].id)
@@ -260,17 +271,27 @@ async function main() {
 
     // Future visits flow through
     await owner.createVisit({ restaurantId: r1.id, visitedAt: new Date(), notes: 'Birthday', personIds: [sarah.id], dishes: [{ key: 'e', person_id: sarah.id, name: 'Green Curry', rating: 5, would_order_again: true, notes: '', photo: null }] })
-    check('new visit with Sarah shows up for wife', (await wife.visits(r1.id)).length === 2)
+    check('a new visit shows up for the wife straight away', (await wife.visits(r1.id)).length === 3)
 
-    // Stranger
-    check('stranger sees no visits', (await stranger.visits(r1.id)).length === 0 && (await stranger.visitedRestaurants()).length === 0)
+    // Nobody outside a circle sees anything
+    check('stranger sees no visits before joining', (await stranger.visits(r1.id)).length === 0 && (await stranger.visitedRestaurants()).length === 0)
     check('stranger sees only their own person', (await stranger.myCircle()).length === 1)
+    check('outsider sees nothing at all', (await outsider.visits(r1.id)).length === 0 && (await outsider.visitedRestaurants()).length === 0)
 
     // Sharing back as a new person
     const zaynCode = await owner.createInvite(zayn.id)
     await stranger.claimInvite(zaynCode)
     const added = await stranger.linkBack(OWNER, null)
     check('sharing back adds the owner under their name', added.name === 'Saif' && added.linked_user_id === OWNER && !added.is_me, added)
+
+    // Circle sharing follows one invite at a time, and is not transitive. The
+    // wife and the stranger are both in the owner's circle, and still see
+    // nothing of each other.
+    const strangerMe = (await stranger.myCircle()).find((p) => p.is_me)!
+    const solo = await stranger.restaurantForPlace({ ...pai, id: 'osm:node/9009', name: 'Solo Diner', latitude: 43.66, longitude: -79.41 })
+    await stranger.createVisit({ restaurantId: solo.id, visitedAt: new Date('2026-07-01T23:00:00Z'), notes: 'Solo lunch', personIds: [strangerMe.id], dishes: [] })
+    check('one circle member cannot see another member\'s own visits', (await wife.visits(solo.id)).length === 0)
+    check('the owner sees them, because the stranger shared back', (await owner.visits(solo.id)).length === 1)
 
     // Photos: attached to the visit, visible to whoever can see the visit
     const terroni = await owner.restaurantForPlace({ ...pai, id: 'osm:node/3003', name: 'Terroni', latitude: 43.6455, longitude: -79.395 })
@@ -297,7 +318,8 @@ async function main() {
     check('owner gets photo links', Object.keys(await owner.photoUrls(paths)).length === 2)
     const wifeTerroni = await wife.visits(terroni.id)
     check('companion on the visit sees its photos', wifeTerroni[0]?.dishes.filter((d) => d.photo_path).length === 2 && Object.keys(await wife.photoUrls(paths)).length === 2)
-    check('someone not on the visit gets no photo links', Object.keys(await stranger.photoUrls(paths)).length === 0)
+    check('a circle member who was not on the visit still sees its photos', Object.keys(await stranger.photoUrls(paths)).length === 2)
+    check('someone outside the circle gets no photo links', Object.keys(await outsider.photoUrls(paths)).length === 0)
 
     const ownerClient = clientFor(proxy.url, OWNER)
     const wifeClient = clientFor(proxy.url, WIFE)

@@ -342,10 +342,36 @@ button.row:active {
   font-size: 22px;
 }
 
-.been {
-  color: var(--good);
+/* Filled: you were there. Outline: someone else in your circle was. */
+.visited-mark {
   margin-left: 6px;
-  font-weight: 700;
+  vertical-align: -3px;
+  flex: none;
+}
+
+.visited-mark circle,
+.visited-mark path {
+  fill: none;
+  stroke: var(--good);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.visited-mark.me circle {
+  fill: var(--good);
+}
+
+.visited-mark.me path {
+  stroke: var(--surface);
+  stroke-width: 1.8;
+}
+
+/* The last row of the nearby card, revealing the next few places. */
+.row.show-more {
+  justify-content: center;
+  color: var(--accent);
+  font-weight: 500;
 }
 
 .list-empty,

@@ -30,6 +30,21 @@ export function StarPicker({ value, onChange }: { value: number; onChange: (n: n
   )
 }
 
+/**
+ * Marks a nearby restaurant someone has already eaten at: filled when you were
+ * there yourself, an outline when it was someone else in your circle.
+ */
+export function VisitedMark({ who }: { who: 'me' | 'circle' }) {
+  const label = who === 'me' ? "You've been here" : 'Someone in your circle has been here'
+  return (
+    <svg className={`visited-mark ${who}`} viewBox="0 0 16 16" width="15" height="15" role="img" aria-label={label}>
+      <title>{label}</title>
+      <circle cx="8" cy="8" r="6.75" />
+      <path d="M5.1 8.4 7 10.3 10.9 6.2" />
+    </svg>
+  )
+}
+
 export function ReorderBadge({ yes }: { yes: boolean }) {
   return (
     <span className={yes ? 'badge yes' : 'badge no'} title={yes ? 'Would order again' : 'Would not order again'}>

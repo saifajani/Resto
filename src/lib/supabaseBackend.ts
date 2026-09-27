@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { groupVisitedRestaurants, type AuthListener, type Backend } from './backend'
+import { groupVisitedRestaurants, type AuthListener, type Backend, type VisitedRow } from './backend'
 import { uuid } from './ids'
 import { PHOTO_BUCKET, photoPath } from './photo'
 import type { NewVisit, PendingPhoto, Person, Place, Profile, Restaurant, Visit } from './types'
@@ -112,11 +112,11 @@ export function createSupabaseBackend(
       const rows = check(
         await client
           .from('visits')
-          .select('visited_at, restaurant:restaurants(*)')
+          .select('visited_at, restaurant:restaurants(*), visit_people(person:people(linked_user_id))')
           .order('visited_at', { ascending: false })
-          .returns<{ visited_at: string; restaurant: Restaurant }[]>(),
+          .returns<VisitedRow[]>(),
       )
-      return groupVisitedRestaurants(rows)
+      return groupVisitedRestaurants(rows, userId())
     },
 
     async visits(restaurantId) {
