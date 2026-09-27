@@ -53,6 +53,11 @@ The template body just needs to include the code:
 <p>Enter this code in Resto: <strong>{{ .Token }}</strong></p>
 ```
 
+Two things to know before you try this:
+
+- **On the free plan you must connect custom SMTP first.** Supabase refuses to change email templates on a free project that is still using its built-in sender. Custom SMTP also lifts the 2-emails-an-hour limit and the rule that the built-in sender only delivers to people on the project team, which otherwise blocks family entirely. A dedicated Gmail account is enough: turn on 2-Step Verification, generate a 16-character app password, and put `smtp.gmail.com`, port `465`, the full address as the username and that app password into **Project Settings > Authentication > SMTP Settings**.
+- **There are three templates, not one.** Confirm signup goes to a brand new address, Magic Link to a returning one, and Reset password to a recovery. Change all three, or a first-time sign-in still arrives as a link.
+
 ### 3. Set up Google Places
 
 In the browser, at [console.cloud.google.com](https://console.cloud.google.com), create a project called `Resto` and link a billing account. Google requires a card even within the free usage.
