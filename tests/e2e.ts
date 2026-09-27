@@ -146,8 +146,14 @@ async function main() {
     geolocation: HOME,
     permissions: ['geolocation'],
   })
-  const google = { nearby: 0, autocompleteTokens: new Set<string>(), details: [] as string[], badKey: false, badMask: false }
-  await context.route(/overpass/, (route) => route.fulfill({ json: overpassFixture }))
+  const google = { nearby: 0, autocompleteTokens: new Set<string>(), details: [] as string[], badKey: false, badMask: false, nearbyRadius: 0 }
+  // The query is form-encoded, so "around:5000" arrives as "around%3A5000".
+  const overpass = { radius: 0 }
+  await context.route(/overpass/, (route) => {
+    const query = decodeURIComponent(route.request().postData() ?? '')
+    overpass.radius = Number(/around:(\d+)/.exec(query)?.[1] ?? 0)
+    return route.fulfill({ json: overpassFixture })
+  })
   await context.route(/photon\.komoot\.io/, (route) => route.fulfill({ json: photonFixture }))
   await context.route(/places\.googleapis\.com/, async (route) => {
     const req = route.request()
@@ -157,6 +163,7 @@ async function main() {
     const cors = { 'access-control-allow-origin': '*' }
     if (url.pathname.endsWith(':searchNearby')) {
       google.nearby++
+      google.nearbyRadius = JSON.parse(req.postData() ?? '{}').locationRestriction?.circle?.radius ?? 0
       if (!req.headers()['x-goog-fieldmask']?.includes('places.displayName')) google.badMask = true
       return route.fulfill({ json: googleNearbyFixture, headers: cors })
     }
@@ -194,9 +201,18 @@ async function main() {
     await shot(page, '02-nearby')
     await page.getByRole('button', { name: 'Show more' }).click()
     ok('Show more reveals the rest, still by distance', (await nearbyTitles()).join() === BY_DISTANCE.join(), await nearbyTitles())
-    ok('Show more goes away at the end of the list', (await page.getByRole('button', { name: 'Show more' }).count()) === 0)
     // Terroni is the farthest, so it only appears once the list is expanded.
     await expectVisible(page, PROVIDER === 'google' ? 'Italian Restaurant' : 'Italian, Pizza', 'cuisine formatted')
+    // The search is wide enough to fill the list in a small town, and the end
+    // of the list sends you to the search box rather than to another request.
+    ok(
+      'the nearby search asks a wide radius',
+      PROVIDER === 'google' ? google.nearbyRadius === 50000 : overpass.radius === 5000,
+      PROVIDER === 'google' ? google.nearbyRadius : overpass.radius,
+    )
+    ok('Show more is replaced at the end of the list', (await page.getByRole('button', { name: 'Show more' }).count()) === 0)
+    await page.getByRole('button', { name: 'Search by name' }).click()
+    ok('Search by name puts the cursor in the search box', await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Search restaurants'))
     await shot(page, '02b-nearby-expanded')
 
     // First visit

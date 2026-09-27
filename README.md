@@ -68,6 +68,7 @@ Then, in Claude Code:
 
 The quotas and budget alert are clicks in the Cloud Console, and Claude Code will point you to them. Suggested daily limits:
 - **Search Nearby:** 150 a day, which keeps you under the 5,000 free a month
+- **Text Search:** 150 a day, a guard rail on a call the app doesn't currently make
 - **Autocomplete:** 300 a day
 - **Get Place:** 300 a day
 

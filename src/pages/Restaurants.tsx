@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { backend } from '../lib/config'
 import { useLocation } from '../lib/location'
@@ -20,6 +20,7 @@ export default function Restaurants() {
   const [nearby, setNearby] = useState<Place[] | null>(null)
   const [nearbyFailed, setNearbyFailed] = useState(false)
   const [shown, setShown] = useState(NEARBY_PAGE)
+  const searchBox = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Place[] | null>(null)
   const [searching, setSearching] = useState(false)
@@ -47,7 +48,7 @@ export default function Restaurants() {
     const controller = new AbortController()
     setNearbyFailed(false)
     setShown(NEARBY_PAGE)
-    nearbyPlaces(coords.latitude, coords.longitude, 800, controller.signal).then(setNearby, () => {
+    nearbyPlaces(coords.latitude, coords.longitude, controller.signal).then(setNearby, () => {
       if (!controller.signal.aborted) setNearbyFailed(true)
     })
     return () => controller.abort()
@@ -70,6 +71,13 @@ export default function Restaurants() {
       controller.abort()
     }
   }, [trimmed, coords])
+
+  /** The nearby list is as long as the provider will make it, so past its end
+   * the only way on is to search by name. */
+  const searchByName = () => {
+    searchBox.current?.scrollIntoView({ block: 'center' })
+    searchBox.current?.focus()
+  }
 
   const open = async (place: Place) => {
     setOpening(place.id)
@@ -123,6 +131,7 @@ export default function Restaurants() {
       </header>
       <div className="search-bar">
         <input
+          ref={searchBox}
           type="search"
           placeholder="Search restaurants"
           value={query}
@@ -181,17 +190,21 @@ export default function Restaurants() {
                   <div className="list-empty loading-line"><Spinner /> Finding restaurants near you</div>
                 )
               ) : others.length === 0 ? (
-                <p className="list-empty">No restaurants found within 800 m.</p>
+                <p className="list-empty">No restaurants found near you. Try searching by name.</p>
               ) : (
                 <ul className="list">
                   {others.slice(0, shown).map(placeRow)}
-                  {others.length > shown && (
-                    <li>
+                  <li>
+                    {others.length > shown ? (
                       <button className="row show-more" onClick={() => setShown((n) => n + NEARBY_PAGE)}>
                         Show more
                       </button>
-                    </li>
-                  )}
+                    ) : (
+                      <button className="row show-more" onClick={searchByName}>
+                        Search by name
+                      </button>
+                    )}
+                  </li>
                 </ul>
               )}
             </section>

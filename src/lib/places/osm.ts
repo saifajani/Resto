@@ -20,6 +20,13 @@ const OVERPASS_ENDPOINTS = [
 const OVERPASS_TIMEOUT_MS = 8000
 const PHOTON_URL = 'https://photon.komoot.io/api/'
 const FOOD_AMENITIES = ['restaurant', 'cafe', 'fast_food', 'bar', 'pub', 'food_court', 'ice_cream', 'biergarten']
+/**
+ * Wide enough to fill the list in a small town, but well short of Google's
+ * 50 km: Overpass is a free shared service on mirrors that come and go, and
+ * this query scans rather than pages, so a huge circle risks a timeout on the
+ * one provider that has no fallback.
+ */
+const NEARBY_RADIUS = 5000
 
 export function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const toRad = (d: number) => (d * Math.PI) / 180
@@ -59,7 +66,7 @@ type OverpassElement = {
   tags?: Record<string, string>
 }
 
-export async function nearbyPlaces(lat: number, lon: number, radius = 800, signal?: AbortSignal): Promise<Place[]> {
+export async function nearbyPlaces(lat: number, lon: number, radius = NEARBY_RADIUS, signal?: AbortSignal): Promise<Place[]> {
   const query = `[out:json][timeout:20];nwr(around:${radius},${lat},${lon})["amenity"~"^(${FOOD_AMENITIES.join('|')})$"]["name"];out center tags 80;`
   let lastError: unknown
   for (const endpoint of OVERPASS_ENDPOINTS) {

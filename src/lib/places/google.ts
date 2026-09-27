@@ -17,6 +17,12 @@ const BASE = 'https://places.googleapis.com/v1'
 const FOOD_TYPES = ['restaurant', 'cafe', 'bar', 'bakery', 'meal_takeaway']
 const FOOD_TYPE_PATTERN = /restaurant|food|cafe|coffee|bar|pub|bakery|meal_|diner|bistro|brunch|dessert|ice_cream|pizza|sandwich|steak|sushi|tea_house|juice/
 const CACHE_MINUTES = 15
+/**
+ * The widest circle Google allows. Nearby Search returns the 20 nearest inside
+ * it, so a big radius costs nothing in a city and is what fills the list in a
+ * small town. Every row shows its distance, so a far one is never misleading.
+ */
+const NEARBY_RADIUS = 50_000
 
 type GooglePlace = {
   id: string
@@ -56,8 +62,21 @@ export function createGooglePlaces(apiKey: string) {
     return (await res.json()) as T
   }
 
+  const toPlaces = (p: GooglePlace, lat: number, lon: number): Place[] => {
+    if (!p.location || !p.displayName) return []
+    return [{
+      id: `google:${p.id}`,
+      name: p.displayName.text,
+      address: p.shortFormattedAddress ?? null,
+      cuisine: p.primaryTypeDisplayName?.text ?? null,
+      latitude: p.location.latitude,
+      longitude: p.location.longitude,
+      distance: distanceMeters(lat, lon, p.location.latitude, p.location.longitude),
+    }]
+  }
+
   return {
-    async nearby(lat: number, lon: number, radius = 800, signal?: AbortSignal): Promise<Place[]> {
+    async nearby(lat: number, lon: number, radius = NEARBY_RADIUS, signal?: AbortSignal): Promise<Place[]> {
       // About 110 m cells, so small moves reuse the last answer.
       const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)},${radius}`
       const cached = nearbyCache.get(cacheKey)
@@ -76,18 +95,7 @@ export function createGooglePlaces(apiKey: string) {
           }),
         }),
       )
-      const places = (json.places ?? []).flatMap((p): Place[] => {
-        if (!p.location || !p.displayName) return []
-        return [{
-          id: `google:${p.id}`,
-          name: p.displayName.text,
-          address: p.shortFormattedAddress ?? null,
-          cuisine: p.primaryTypeDisplayName?.text ?? null,
-          latitude: p.location.latitude,
-          longitude: p.location.longitude,
-          distance: distanceMeters(lat, lon, p.location.latitude, p.location.longitude),
-        }]
-      })
+      const places = (json.places ?? []).flatMap((p) => toPlaces(p, lat, lon))
       nearbyCache.set(cacheKey, { at: Date.now(), places })
       return places
     },
