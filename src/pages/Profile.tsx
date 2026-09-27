@@ -69,7 +69,7 @@ export default function Profile() {
             const circle = (await backend.circlesImIn()).find((p) => p.id === person.id)
             const ownerName = circle?.owner?.display_name ?? person.name
             setInviter({ id: person.owner_id, name: ownerName })
-            return `You're in. Visits ${ownerName} logged with you now show up on your restaurant pages.`
+            return `You're in. Every visit ${ownerName} logs now shows up on your restaurant pages.`
           })
         }
       >
@@ -85,7 +85,7 @@ export default function Profile() {
           />
         </label>
         <p className="fine-print">
-          Enter the code a friend or family member sent you. You'll see the visits they've logged with you, and they'll see the ones you log with them.
+          Enter the code a friend or family member sent you. You'll see the visits they've logged, including ones you weren't on, and they'll see yours if you share back.
         </p>
         <button className="secondary" disabled={busy || code.length < 6}>Join</button>
       </form>

@@ -94,8 +94,8 @@ export default function People() {
           <button className="secondary" disabled={!newName.trim()}>Add</button>
         </form>
         <p className="fine-print padded">
-          People you eat with don't need an account. If they want to see your visits with them, tap Invite and send them the code.
-          Once they sign in and enter it, you'll each see every visit the other has logged with you, including future ones.
+          People you eat with don't need an account. If they want to see what you've been ordering, tap Invite and send them the code.
+          Once they sign in and enter it, they'll see every visit you log, past and future. You'll see theirs when they share back.
         </p>
       </section>
 
@@ -142,7 +142,13 @@ export default function People() {
 
 function InviteSheet({ invite, onClose }: { invite: Invite; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
-  const message = `I'm using Resto to keep track of what we order at restaurants. Open ${window.location.origin}, sign in, and enter invite code ${invite.code} on the Profile tab so we can both see our visits together.`
+  // The app first: someone who has it installed should not be sent to a browser
+  // tab, which is a separate copy with its own storage and its own sign-in.
+  const message = [
+    `I'm using Resto to keep track of what we order at restaurants.`,
+    `Join my circle so we can see each other's ratings. Open the app and enter invite code ${invite.code} on the Profile tab.`,
+    `If you don't have it yet, open ${window.location.origin}, sign in, and enter the code ${invite.code} on the Profile tab.`,
+  ].join('\n\n')
 
   const share = async () => {
     if (navigator.share) {
@@ -166,7 +172,7 @@ function InviteSheet({ invite, onClose }: { invite: Invite; onClose: () => void 
       <div className="invite">
         <p className="muted">Send {invite.personName} this code:</p>
         <div className="invite-code">{invite.code}</div>
-        <p className="muted">When {invite.personName} enters it in Resto, they'll see every visit you've logged with them, and you'll see the ones they log with you.</p>
+        <p className="muted">When {invite.personName} enters it in Resto, they'll see every visit you log, not only the ones you were both on. You'll see theirs when they share back.</p>
       </div>
     </Sheet>
   )

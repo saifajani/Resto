@@ -8,7 +8,7 @@ const NEW = 'new'
 
 /**
  * Shown after redeeming someone's invite: pick which person in your circle is
- * them, so they see the visits you log with them too.
+ * them, so they see the visits you log too.
  */
 export function LinkBackSheet({
   ownerId,
@@ -63,7 +63,7 @@ export function LinkBackSheet({
       }
     >
       <p className="muted">
-        Who is {ownerName} in your People list? {ownerName} will see the visits you log with them, the same way you see theirs.
+        Who is {ownerName} in your People list? {ownerName} will see the visits you log, the same way you now see theirs.
       </p>
       {choices === null ? (
         !error && <div className="list-empty"><Spinner /></div>
