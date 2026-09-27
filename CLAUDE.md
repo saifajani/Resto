@@ -9,7 +9,7 @@ Resto is a personal and family app for remembering what everyone ordered at rest
 **Screens:**
 - **Restaurants** (`/`): nearby restaurants (places you've visited are pinned to the top), search, and your restaurants
 - **Restaurant** (`/r/:id`): a "what to order" summary per person, plus the visit history
-- **Log a visit** (`/r/:id/log`): who was there, and each dish with 1 to 5 stars, a "would order again" toggle and notes
+- **Log a visit** (`/r/:id/log`): who was there, and each dish with 1 to 5 stars, a "would order again" toggle, notes and an optional photo
 - **People** (`/people`): your circle, plus invite codes so companions can see the visits they were on
 - **Profile** (`/profile`): your display name, redeem an invite code, sign out
 
@@ -34,6 +34,9 @@ Decisions from the planning conversation that aren't obvious from the code:
   - The Supabase Management API can return **HTTP 200 without applying a template field**. Read the templates back after a PATCH rather than trusting the status code.
 - **v0.1 is deliberately free of charge**, and all three pieces are now in place: the dedicated Gmail account over SMTP for sign-in emails (500 a day, sender is that Gmail address), the free `.vercel.app` domain, and the free Supabase org. A bought domain plus Resend was priced up and **deferred**, not rejected: it is the upgrade when the app outgrows a Gmail sender. Swapping it in is Supabase settings only, with no app changes.
 - **Vercel is live** (26 September 2026): https://resto-reminder.vercel.app, built from `main` on every push. Changing the `.vercel.app` name means adding the new domain and, optionally, deleting the old one; deleting it makes the old address 404, so Supabase `site_url` has to move with it. The three `VITE_` Supabase variables (URL, publishable key, project ref) are set there as **Config** (not Secret), because Vite inlines them into the browser bundle: marking them secret would be a false sense of security, and both are public by design. `site_url` points at this URL, with `http://localhost:8081/**` kept in `uri_allow_list` so local dev still works.
+- **Dish photos** (26 September 2026). `20260927025536_dish_photos.sql` is **applied** to the live project: the `dish-photos` bucket exists, is private, JPEG only with a 2 MB cap, and has its four storage policies. The migration had to go out **before** the frontend, because the new app calls `create_visit` with `p_id`.
+  - The owner's call: photos belong to the visit (stored in the visit's folder, visible to whoever can see the visit). Don't restructure them around the offline queue; the app already picks the visit and dish ids itself, so a queued visit can replay the same save steps later.
+  - Free plan storage is **1 GB**. Photos are shrunk on the phone to about 250 KB, so roughly 4,000 photos. Supabase's image resizing is a paid feature, which is why shrinking happens in the app.
 - **Not set up yet:** the Google Cloud key, so both local dev and the deployed app use OpenStreetMap for restaurants. `VITE_GOOGLE_MAPS_API_KEY` is commented out in `.env` and absent from Vercel. This is the **work in progress**: the owner asked for it on 26 September 2026 and wants to know whether ratings, reviews and opening hours are available (see **Places** below). The step-by-step is in README.md.
 - **Structure:**
   - The owner does **not** need Resto to mirror Schedule1. They want whatever structure is best for a mobile web app that runs cleanly on iPhones.
@@ -130,7 +133,8 @@ There is one Supabase project for Resto, used for both local development and pro
 - **Session:** `src/session.ts` (`useUserId()`), fed by `backend.onAuthChange`.
 - **UI:** plain CSS with design tokens and dark mode in `src/styles.css`, plus small shared components in `src/components/ui.tsx`. No Tailwind or shadcn here, unlike Schedule1.
 - **Theme:** Light / Dark / Automatic, chosen on the Profile tab. `src/lib/theme.ts` stores the choice in localStorage under `resto:theme` and resolves it to `<html data-theme="light|dark">`, which the dark palette at the top of `styles.css` keys off. The inline script in `index.html` applies it before the first paint and duplicates that resolution, so change both together.
-- **Helpers:** `src/lib/format.ts` (dates, error messages) and `src/lib/summary.ts` (the "what to order" grouping).
+- **Helpers:** `src/lib/format.ts` (dates, error messages), `src/lib/summary.ts` (the "what to order" grouping) and `src/lib/photo.ts` (shrinking photos and their storage path).
+- **"What to order" groups by account, not person row.** The same human is a different `people` row in each circle (your "Sarah", and Sarah's own "me"), so `summarize` groups by `linked_user_id` when there is one and falls back to the person id. The group's name is the one from the viewer's own circle.
 - **Imports:** `@/` is an alias for `src/` (set in `vite.config.ts` and `tsconfig.json`). Pages import siblings relatively; `@/` is mostly used for `@/integrations/supabase/client`.
 - **Home Screen install:** `index.html` carries the Apple meta tags and links `public/manifest.webmanifest`. There is no service worker yet, so the app needs a connection to start.
 
@@ -141,6 +145,16 @@ Every read and write goes through the `Backend` interface (`src/lib/backend.ts`)
 - `demoBackend.ts`: localStorage, single user, and invites are disabled.
 
 Keep the two implementations in step with each other when changing the interface.
+
+### Dish photos
+
+One optional photo per dish, in the private `dish-photos` bucket at `<owner id>/<visit id>/<dish id>.jpg`.
+- **Taking one:** a plain `<input type="file" accept="image/*">` with no `capture` attribute, so iPhone offers Take Photo or Photo Library. `shrinkPhoto` redraws it on a canvas as a JPEG at most 1600 px on the long edge (about 250 KB), which also drops the location data.
+- **Saving:** `createVisit` picks the visit and dish ids, calls `create_visit`, then uploads each photo and sets `dishes.photo_path` for the ones that worked. The visit is always saved; photos that failed come back as `pendingPhotos`, and Log a visit stays on screen explaining which dish's photo didn't upload, with **Try again** (`retryPhotos`) and **Skip**. Never drop a photo silently.
+- **Access:** storage policies read the owner and visit from the path. Reading needs `can_view_visit` (or it's your own folder); uploading needs your own folder and `owns_visit`. A check constraint pins `photo_path` to the dish's own visit folder.
+- **Showing:** the bucket is private, so the restaurant screen asks `photoUrls` for signed links (an hour) on every load.
+- **Deleting:** storage files don't cascade with rows, and Supabase blocks deleting them from SQL, so `deleteVisit` lists and removes the visit's folder itself.
+- **Demo mode** keeps photos in IndexedDB (`demoPhotoStore.ts`), since localStorage holds only about 5 MB.
 
 ### Authentication Flow
 
@@ -172,10 +186,11 @@ Google billing (per-SKU free caps): Nearby Search is **Pro, 5,000 free a month**
 6. **Supabase CLI link:** `db push` targets whatever is in `supabase/.temp/project-ref`. Always go through `scripts/db-push.sh`, which verifies the ref.
 7. **Email limits:** custom SMTP is connected (Gmail, see the status section), so the limit is **30 sign-in emails an hour** and 500 a day, not the built-in sender's 2 an hour. If codes stop arriving, check the Gmail account's app password first, then spam (a new sender with no reputation), not the Supabase sender.
 8. **`npm run test:e2e` needs `CHROMIUM_PATH` on a Mac.** The default in `tests/e2e.ts` is a Linux CI path (`/opt/pw-browsers/...`). On this Mac the browser is under `~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing` (the version in the folder name changes). The run also needs port 4179 free, and it always runs in demo mode with the map APIs mocked, so it never touches Supabase or Google.
-9. **`npm run test:db` fails fast if the local database isn't up.** It talks to PostgREST on `http://127.0.0.1:3900` (override with `TEST_POSTGREST_URL`); `tests/setup-db.sh` starts Postgres on port 5499 plus PostgREST and applies every migration, and must not run as root.
+9. **`npm run test:db` fails fast if the local database isn't up.** It talks to PostgREST on `http://127.0.0.1:3900` (override with `TEST_POSTGREST_URL`); `tests/setup-db.sh` starts Postgres on port 5499 plus PostgREST and applies every migration, and must not run as root. The test leaves its data behind, so **rerun `setup-db.sh` before every `test:db` run**, or dozens of checks fail on the leftovers. The script also stubs the `storage` schema, and the test fakes the Storage API on top of it (see `tests/README.md`).
+10. **Photos and the free plan:** storage is capped at 1 GB. Photo links are signed and expire after an hour, so never save them; ask `photoUrls` again. The e2e test sets `globalThis.__restoFailPhotoUploads` to make demo uploads fail, which is how the "didn't upload" screen is tested.
 
 ## Adding New Features
 
 - UI change: `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:e2e`.
-- Data change: update the `Backend` interface and both implementations, add a migration, and extend `tests/db-integration.ts`.
+- Data change: update the `Backend` interface and both implementations, add a migration, and extend `tests/db-integration.ts`. If it touches photos, remember the storage policies in the migration and the storage stub in `tests/setup-db.sh`.
 - New places field: check its Google pricing tier first (see Pitfall 3).

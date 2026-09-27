@@ -4,7 +4,7 @@ import { backend } from '../lib/config'
 import { summarize } from '../lib/summary'
 import { displayName, visitPeople, type Restaurant, type Visit } from '../lib/types'
 import { useUserId } from '../session'
-import { ErrorNote, ReorderBadge, Spinner, Stars } from '../components/ui'
+import { DishPhoto, ErrorNote, PhotoViewer, ReorderBadge, Spinner, Stars } from '../components/ui'
 import { errorMessage, formatDate } from '../lib/format'
 
 export default function RestaurantPage() {
@@ -15,6 +15,8 @@ export default function RestaurantPage() {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(passed?.id === id ? passed : null)
   const [visits, setVisits] = useState<Visit[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
+  const [viewing, setViewing] = useState<{ url: string; name: string } | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -25,6 +27,9 @@ export default function RestaurantPage() {
       }
       setRestaurant(r)
       setVisits(v)
+      const paths = v.flatMap((visit) => visit.dishes.flatMap((d) => (d.photo_path ? [d.photo_path] : [])))
+      // Photos are extra: the page works without them if the links can't be fetched.
+      backend.photoUrls(paths).then(setPhotoUrls, () => {})
     } catch (e) {
       setError(errorMessage(e))
     }
@@ -33,6 +38,11 @@ export default function RestaurantPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  const photo = (path: string | null, name: string) => {
+    const url = path ? photoUrls[path] : undefined
+    return <DishPhoto url={url} name={name} onOpen={url ? () => setViewing({ url, name }) : undefined} />
+  }
 
   const groups = useMemo(() => summarize(visits ?? [], userId), [visits, userId])
 
@@ -81,11 +91,12 @@ export default function RestaurantPage() {
         <>
           <h2 className="section-title">What to order</h2>
           {groups.map((group) => (
-            <section key={group.personId} className="card">
+            <section key={group.key} className="card">
               <h3>{group.title}</h3>
               <ul className="dish-list">
                 {group.items.map((item) => (
                   <li key={item.key}>
+                    {photo(item.photoPath, item.name)}
                     <div className="dish-main">
                       <div className="dish-name">
                         {item.name}
@@ -124,6 +135,7 @@ export default function RestaurantPage() {
                 <ul className="dish-list">
                   {dishes.map((dish) => (
                     <li key={dish.id}>
+                      {photo(dish.photo_path, dish.name)}
                       <div className="dish-main">
                         <div className="dish-name">{dish.name}</div>
                         <div className="dish-who">{displayName(personById.get(dish.person_id), userId)}</div>
@@ -140,6 +152,8 @@ export default function RestaurantPage() {
           })}
         </>
       )}
+
+      {viewing && <PhotoViewer url={viewing.url} name={viewing.name} onClose={() => setViewing(null)} />}
     </>
   )
 }

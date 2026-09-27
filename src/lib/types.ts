@@ -27,6 +27,8 @@ export type Dish = {
   rating: number
   would_order_again: boolean
   notes: string | null
+  /** In the dish-photos bucket: <owner id>/<visit id>/<dish id>.jpg */
+  photo_path: string | null
   created_at: string
 }
 
@@ -55,6 +57,22 @@ export type DraftDish = {
   rating: number
   would_order_again: boolean
   notes: string
+  /** Already shrunk to a small JPEG. Held in memory until the visit is saved. */
+  photo: Blob | null
+}
+
+/** A dish photo that hasn't uploaded yet, kept so the upload can be retried. */
+export type PendingPhoto = {
+  /** The draft dish's key */
+  key: string
+  dishId: string
+  photo: Blob
+}
+
+/** The visit is always saved; photos that didn't upload come back to retry. */
+export type SavedVisit = {
+  visitId: string
+  pendingPhotos: PendingPhoto[]
 }
 
 /** A restaurant from the map provider, before it has a record in our database. */

@@ -1,13 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { groupVisitedRestaurants, type AuthListener, type Backend } from './backend'
-import type { NewVisit, Person, Place, Profile, Restaurant, Visit } from './types'
+import { uuid } from './ids'
+import { PHOTO_BUCKET, photoPath } from './photo'
+import type { NewVisit, PendingPhoto, Person, Place, Profile, Restaurant, Visit } from './types'
 
 const PERSON_COLUMNS = 'id, owner_id, name, is_me, linked_user_id, invite_code'
+/** How long a photo link works. The restaurant screen asks for fresh ones on every load. */
+const PHOTO_LINK_SECONDS = 60 * 60
+
 const VISIT_COLUMNS = `
   id, owner_id, restaurant_id, visited_at, notes,
   owner:profiles(display_name),
   visit_people(person:people(${PERSON_COLUMNS})),
-  dishes(id, person_id, name, rating, would_order_again, notes, created_at)
+  dishes(id, person_id, name, rating, would_order_again, notes, photo_path, created_at)
 `
 
 /** Turns Postgres errors into something a person can read. */
@@ -33,6 +38,26 @@ export function createSupabaseBackend(
     const id = options.getUserId ? options.getUserId() : currentUserId
     if (!id) throw new Error('Not signed in')
     return id
+  }
+  const photos = () => client.storage.from(PHOTO_BUCKET)
+
+  /** Uploads each photo, then points its dish at it. Returns the ones that failed. */
+  const uploadPhotos = async (visitId: string, pending: PendingPhoto[]): Promise<PendingPhoto[]> => {
+    const owner = userId()
+    const failed = await Promise.all(
+      pending.map(async (p) => {
+        const path = photoPath(owner, visitId, p.dishId)
+        try {
+          const upload = await photos().upload(path, p.photo, { contentType: 'image/jpeg', upsert: true })
+          if (upload.error) return p
+          const update = await client.from('dishes').update({ photo_path: path }).eq('id', p.dishId)
+          return update.error ? p : null
+        } catch {
+          return p
+        }
+      }),
+    )
+    return failed.filter((p): p is PendingPhoto => p !== null)
   }
 
   return {
@@ -106,12 +131,17 @@ export function createSupabaseBackend(
     },
 
     async createVisit(visit: NewVisit) {
+      // Ids are chosen here so each photo's folder is known before it uploads.
+      const visitId = uuid()
+      const dishes = visit.dishes.map((d) => ({ ...d, id: uuid() }))
       check(
         await client.rpc('create_visit', {
+          p_id: visitId,
           p_restaurant_id: visit.restaurantId,
           p_visited_at: visit.visitedAt.toISOString(),
           p_person_ids: visit.personIds,
-          p_dishes: visit.dishes.map(({ person_id, name, rating, would_order_again, notes }) => ({
+          p_dishes: dishes.map(({ id, person_id, name, rating, would_order_again, notes }) => ({
+            id,
             person_id,
             name,
             rating,
@@ -121,10 +151,33 @@ export function createSupabaseBackend(
           p_notes: visit.notes,
         }),
       )
+      const pending = dishes.flatMap((d) => (d.photo ? [{ key: d.key, dishId: d.id, photo: d.photo }] : []))
+      return { visitId, pendingPhotos: await uploadPhotos(visitId, pending) }
+    },
+
+    async retryPhotos(visitId, pending) {
+      return uploadPhotos(visitId, pending)
+    },
+
+    async photoUrls(paths) {
+      if (paths.length === 0) return {}
+      // Photos are extra, so a failure here leaves them out rather than breaking the page.
+      const { data, error } = await photos().createSignedUrls(paths, PHOTO_LINK_SECONDS)
+      if (error || !data) return {}
+      return Object.fromEntries(data.flatMap((d) => (d.path && d.signedUrl ? [[d.path, d.signedUrl]] : [])))
     },
 
     async deleteVisit(id) {
-      check(await client.from('visits').delete().eq('id', id))
+      const deleted = check(await client.from('visits').delete().eq('id', id).select('id'))
+      if (deleted.length === 0) return
+      // Storage files don't cascade with the row. Best effort: a leftover file only costs space.
+      const folder = `${userId()}/${id}`
+      try {
+        const { data } = await photos().list(folder)
+        if (data?.length) await photos().remove(data.map((f) => `${folder}/${f.name}`))
+      } catch {
+        // The visit is already gone, which is what the person asked for.
+      }
     },
 
     async myCircle() {

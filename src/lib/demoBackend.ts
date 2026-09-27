@@ -1,5 +1,8 @@
 import { groupVisitedRestaurants, type AuthListener, type Backend } from './backend'
-import type { Dish, NewVisit, Person, Profile, Restaurant, Visit } from './types'
+import { demoPhotos } from './demoPhotoStore'
+import { uuid } from './ids'
+import { photoPath } from './photo'
+import type { Dish, NewVisit, PendingPhoto, Person, Profile, Restaurant, Visit } from './types'
 
 /**
  * A single-user backend that keeps everything in this browser's localStorage.
@@ -21,12 +24,12 @@ type Store = {
 
 const KEY = 'resto-demo-v1'
 
-function uuid(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16)
-  })
+/**
+ * Test hook: the UI tests set this to make the next N photo uploads fail, as
+ * they would on a weak connection.
+ */
+declare global {
+  var __restoFailPhotoUploads: number | undefined
 }
 
 function emptyStore(): Store {
@@ -68,6 +71,30 @@ export function createDemoBackend(): Backend {
     visit_people: v.person_ids.map((id) => ({ person: store.people.find((p) => p.id === id) ?? null })),
     dishes: store.dishes.filter((d) => d.visit_id === v.id).map(({ visit_id: _visitId, ...dish }) => dish),
   })
+  /** Photo links handed out so far, so each photo gets one object URL. */
+  const links = new Map<string, string>()
+
+  const uploadPhotos = async (visitId: string, pending: PendingPhoto[]): Promise<PendingPhoto[]> => {
+    const failed: PendingPhoto[] = []
+    for (const p of pending) {
+      const dish = store.dishes.find((d) => d.id === p.dishId)
+      if (!dish) continue
+      try {
+        if (globalThis.__restoFailPhotoUploads) {
+          globalThis.__restoFailPhotoUploads -= 1
+          throw new Error('Simulated upload failure')
+        }
+        const path = photoPath(me(), visitId, p.dishId)
+        await demoPhotos.put(path, p.photo)
+        dish.photo_path = path
+      } catch {
+        failed.push(p)
+      }
+    }
+    save()
+    return failed
+  }
+
   const newestFirst = (a: { visited_at: string }, b: { visited_at: string }) => b.visited_at.localeCompare(a.visited_at)
 
   return {
@@ -140,6 +167,7 @@ export function createDemoBackend(): Backend {
 
     async createVisit(visit: NewVisit) {
       const id = uuid()
+      const pending: PendingPhoto[] = []
       const personIds = [...new Set([...visit.personIds, ...visit.dishes.map((d) => d.person_id)])]
       store.visits.push({
         id,
@@ -151,24 +179,48 @@ export function createDemoBackend(): Backend {
       })
       const now = Date.now()
       visit.dishes.forEach((d, i) => {
+        const dishId = uuid()
+        if (d.photo) pending.push({ key: d.key, dishId, photo: d.photo })
         store.dishes.push({
-          id: uuid(),
+          id: dishId,
           visit_id: id,
           person_id: d.person_id,
           name: d.name.trim(),
           rating: d.rating,
           would_order_again: d.would_order_again,
           notes: d.notes.trim() || null,
+          photo_path: null,
           created_at: new Date(now + i).toISOString(),
         })
       })
       save()
+      return { visitId: id, pendingPhotos: await uploadPhotos(id, pending) }
+    },
+
+    async retryPhotos(visitId, pending) {
+      return uploadPhotos(visitId, pending)
+    },
+
+    async photoUrls(paths) {
+      const urls: Record<string, string> = {}
+      for (const path of paths) {
+        let url = links.get(path)
+        if (!url) {
+          const blob = await demoPhotos.get(path).catch(() => undefined)
+          if (!blob) continue
+          url = URL.createObjectURL(blob)
+          links.set(path, url)
+        }
+        urls[path] = url
+      }
+      return urls
     },
 
     async deleteVisit(id) {
       store.visits = store.visits.filter((v) => v.id !== id)
       store.dishes = store.dishes.filter((d) => d.visit_id !== id)
       save()
+      if (store.userId) await demoPhotos.removeFolder(`${store.userId}/${id}`).catch(() => undefined)
     },
 
     async myCircle() {

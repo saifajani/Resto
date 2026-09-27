@@ -14,7 +14,7 @@ const visit = (id: string, visitedAt: string, people: Person[], dishes: [Person,
   id, owner_id: ME, restaurant_id: 'r1', visited_at: visitedAt, notes: null, owner: { display_name: 'Saif' },
   visit_people: people.map((p) => ({ person: p })),
   dishes: dishes.map(([p, name, rating, again], i) => ({
-    id: `${id}-${i}`, person_id: p.id, name, rating, would_order_again: again, notes: null, created_at: visitedAt,
+    id: `${id}-${i}`, person_id: p.id, name, rating, would_order_again: again, notes: null, photo_path: null, created_at: visitedAt,
   })),
 })
 
@@ -46,6 +46,46 @@ describe('summarize', () => {
     const linkedSarah = { ...sarah, linked_user_id: 'user-sarah' }
     const shared = visits.map((v) => ({ ...v, visit_people: [{ person: me }, { person: linkedSarah }] }))
     expect(summarize(shared, 'user-sarah').map((g) => g.title)).toEqual(['Your dishes', "Saif's dishes"])
+  })
+})
+
+describe('summarize across two circles', () => {
+  // Saif and Sarah are linked both ways, and each logs a visit to the same place.
+  const SARAH = 'user-sarah'
+  const sarahInMine = { ...sarah, linked_user_id: SARAH }
+  const sarahsMe: Person = { id: 's-me', owner_id: SARAH, name: 'Sarah K', is_me: true, linked_user_id: SARAH, invite_code: null }
+  const meInSarahs: Person = { id: 's-saif', owner_id: SARAH, name: 'Hubby', is_me: false, linked_user_id: ME, invite_code: null }
+  const withPhoto = (v: Visit, name: string, path: string): Visit => ({
+    ...v, dishes: v.dishes.map((d) => (d.name === name ? { ...d, photo_path: path } : d)),
+  })
+  const both = [
+    { ...visit('v3', '2026-09-25T23:00:00Z', [sarahsMe, meInSarahs], [[meInSarahs, 'Khao Soi', 3, false], [sarahsMe, 'Green Curry', 4, true]]), owner_id: SARAH },
+    withPhoto(visit('v2', '2026-09-20T23:00:00Z', [me, sarahInMine], [[me, 'Khao Soi', 5, true], [sarahInMine, 'Green Curry', 5, true]]), 'Khao Soi', 'photo-v2'),
+  ]
+
+  it('shows each person once, whoever logged the visit', () => {
+    expect(summarize(both, ME).map((g) => g.title)).toEqual(['Your dishes', "Sarah's dishes"])
+  })
+
+  it("uses the viewer's own name for someone", () => {
+    expect(summarize(both, SARAH).map((g) => g.title)).toEqual(['Your dishes', "Hubby's dishes"])
+  })
+
+  it('merges the same dish from both circles, keeping the newest rating', () => {
+    const khaoSoi = summarize(both, ME)[0].items.find((i) => i.name === 'Khao Soi')!
+    expect(khaoSoi.timesOrdered).toBe(2)
+    expect(khaoSoi.rating).toBe(3)
+  })
+
+  it('uses the newest photo of a dish, even from an older visit', () => {
+    const khaoSoi = summarize(both, ME)[0].items.find((i) => i.name === 'Khao Soi')!
+    expect(khaoSoi.photoPath).toBe('photo-v2')
+  })
+
+  it('keeps people without an account apart by person', () => {
+    const kid = person('p-kid', 'Zayn')
+    const withKid = [visit('v4', '2026-09-26T23:00:00Z', [me, kid], [[kid, 'Fries', 5, true]]), ...both]
+    expect(summarize(withKid, ME).map((g) => g.title)).toEqual(['Your dishes', "Zayn's dishes", "Sarah's dishes"])
   })
 })
 

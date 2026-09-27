@@ -2,6 +2,9 @@
  * Runs the real Supabase backend code against Postgres + PostgREST (the same
  * pieces Supabase uses), with the schema from supabase/migrations applied.
  * Three users: an owner, a companion who redeems an invite, and a stranger.
+ * Photo uploads go through a small fake of the Storage API that writes to
+ * storage.objects as the signed-in user, so the bucket's row-level security
+ * is what decides.
  *
  * Needs: TEST_POSTGREST_URL (PostgREST base URL) and TEST_JWT_SECRET, plus the
  * three user IDs below present in auth.users. See tests/README.md.
@@ -25,10 +28,94 @@ function jwt(sub: string): string {
   return `${body}.${createHmac('sha256', secret).update(body).digest('base64url')}`
 }
 
-/** supabase-js calls /rest/v1/...; plain PostgREST serves from /. */
+/** The next N photo uploads fail, as they would on a weak connection. */
+let failUploads = 0
+
+function readBody(req: http.IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = []
+    req.on('data', (c) => chunks.push(c))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+  })
+}
+
+/**
+ * Just enough of Supabase Storage for the app: upload, list, remove and signed
+ * links. Each call reads or writes storage.objects through PostgREST with the
+ * caller's token, so the policies from the migrations apply as they would in Supabase.
+ */
+async function fakeStorage(req: http.IncomingMessage, res: http.ServerResponse) {
+  const body = await readBody(req)
+  const json = () => JSON.parse(body.toString() || '{}')
+  const objects = (query: string, init: RequestInit = {}) =>
+    fetch(`${postgrestUrl}/objects?${query}`, {
+      ...init,
+      headers: {
+        authorization: req.headers.authorization ?? '',
+        'accept-profile': 'storage',
+        'content-profile': 'storage',
+        'content-type': 'application/json',
+        ...(init.headers as Record<string, string>),
+      },
+    })
+  const send = (status: number, data: unknown) => {
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(data))
+  }
+  const denied = (message: string) => send(400, { statusCode: '403', error: 'Unauthorized', message })
+  const path = decodeURIComponent(req.url!.replace(/^\/storage\/v1/, '').split('?')[0])
+  let m: RegExpMatchArray | null
+
+  if ((m = path.match(/^\/object\/list\/([^/]+)$/))) {
+    const prefix = String(json().prefix ?? '')
+    const rows = (await (await objects(`select=id,name&bucket_id=eq.${m[1]}&name=like.${encodeURIComponent(`${prefix}/*`)}`)).json()) as { id: string; name: string }[]
+    return send(200, rows.map((r) => ({ id: r.id, name: r.name.slice(prefix.length + 1) })))
+  }
+  if ((m = path.match(/^\/object\/sign\/([^/]+)$/))) {
+    const bucket = m[1]
+    const signed = await Promise.all(
+      (json().paths as string[]).map(async (p) => {
+        const rows = (await (await objects(`select=name&bucket_id=eq.${bucket}&name=eq.${encodeURIComponent(p)}`)).json()) as unknown[]
+        return rows.length
+          ? { path: p, signedURL: `/object/sign/${bucket}/${p}?token=test`, error: null }
+          : { path: p, signedURL: null, error: 'Either the object does not exist or you do not have access to it' }
+      }),
+    )
+    return send(200, signed)
+  }
+  if (req.method === 'DELETE' && (m = path.match(/^\/object\/([^/]+)$/))) {
+    const names = (json().prefixes as string[]).map((n) => `"${n}"`).join(',')
+    const removed = await objects(`bucket_id=eq.${m[1]}&name=in.(${encodeURIComponent(names)})`, { method: 'DELETE', headers: { prefer: 'return=representation' } })
+    return send(200, await removed.json())
+  }
+  if (req.method === 'POST' && (m = path.match(/^\/object\/([^/]+)\/(.+)$/))) {
+    if (failUploads > 0) {
+      failUploads--
+      return send(503, { statusCode: '503', error: 'Unavailable', message: 'Simulated dropped connection' })
+    }
+    const upsert = req.headers['x-upsert'] === 'true'
+    const inserted = await objects(upsert ? 'on_conflict=bucket_id,name' : '', {
+      method: 'POST',
+      headers: { prefer: upsert ? 'resolution=merge-duplicates,return=minimal' : 'return=minimal' },
+      body: JSON.stringify({ bucket_id: m[1], name: m[2] }),
+    })
+    if (!inserted.ok) return denied(`new row violates row-level security policy (${inserted.status})`)
+    return send(200, { Id: m[2], Key: `${m[1]}/${m[2]}` })
+  }
+  send(404, { statusCode: '404', error: 'Not found', message: `Fake storage has no ${req.method} ${path}` })
+}
+
+/** supabase-js calls /rest/v1/... and /storage/v1/...; plain PostgREST serves from /. */
 function startProxy(): Promise<{ url: string; close: () => void }> {
   const target = new URL(postgrestUrl)
   const server = http.createServer((req, res) => {
+    if (req.url!.startsWith('/storage/v1/')) {
+      fakeStorage(req, res).catch((e) => {
+        res.writeHead(500)
+        res.end(String(e))
+      })
+      return
+    }
     const upstream = http.request(
       { host: target.hostname, port: target.port, method: req.method, path: req.url!.replace(/^\/rest\/v1/, ''), headers: { ...req.headers, host: target.host } },
       (up) => {
@@ -44,10 +131,13 @@ function startProxy(): Promise<{ url: string; close: () => void }> {
   }))
 }
 
-function backendFor(url: string, userId: string) {
+function clientFor(url: string, userId: string) {
   const token = jwt(userId)
-  const client = createClient(url, 'anon-key-unused', { accessToken: async () => token })
-  return createSupabaseBackend(client, { getUserId: () => userId })
+  return createClient(url, 'anon-key-unused', { accessToken: async () => token })
+}
+
+function backendFor(url: string, userId: string) {
+  return createSupabaseBackend(clientFor(url, userId), { getUserId: () => userId })
 }
 
 let failures = 0
@@ -100,8 +190,8 @@ async function main() {
       notes: 'Busy Friday',
       personIds: [me.id, sarah.id],
       dishes: [
-        { key: 'a', person_id: me.id, name: 'Khao Soi', rating: 5, would_order_again: true, notes: 'extra lime' },
-        { key: 'b', person_id: sarah.id, name: 'Pad Thai', rating: 3, would_order_again: false, notes: '' },
+        { key: 'a', person_id: me.id, name: 'Khao Soi', rating: 5, would_order_again: true, notes: 'extra lime', photo: null },
+        { key: 'b', person_id: sarah.id, name: 'Pad Thai', rating: 3, would_order_again: false, notes: '', photo: null },
       ],
     })
     await owner.createVisit({
@@ -110,8 +200,8 @@ async function main() {
       notes: '',
       personIds: [me.id],
       dishes: [
-        { key: 'c', person_id: me.id, name: 'khao soi ', rating: 4, would_order_again: true, notes: '' },
-        { key: 'd', person_id: zayn.id, name: 'Fries', rating: 5, would_order_again: true, notes: '' },
+        { key: 'c', person_id: me.id, name: 'khao soi ', rating: 4, would_order_again: true, notes: '', photo: null },
+        { key: 'd', person_id: zayn.id, name: 'Fries', rating: 5, would_order_again: true, notes: '', photo: null },
       ],
     })
     const visits = await owner.visits(r1.id)
@@ -124,7 +214,7 @@ async function main() {
     check('visitedRestaurants groups by restaurant', visited.length === 1 && visited[0].visitCount === 2, visited)
 
     await rejects('rating out of range is rejected', () =>
-      owner.createVisit({ restaurantId: r1.id, visitedAt: new Date(), notes: '', personIds: [me.id], dishes: [{ key: 'x', person_id: me.id, name: 'X', rating: 9, would_order_again: false, notes: '' }] }),
+      owner.createVisit({ restaurantId: r1.id, visitedAt: new Date(), notes: '', personIds: [me.id], dishes: [{ key: 'x', person_id: me.id, name: 'X', rating: 9, would_order_again: false, notes: '', photo: null }] }),
       /rating/)
     check('failed visit left nothing behind', (await owner.visits(r1.id)).length === 2)
     await rejects('cannot delete a person with dishes', () => owner.deletePerson(sarah.id), /has dishes logged/)
@@ -169,7 +259,7 @@ async function main() {
     check('owner\'s circle shows wife\'s circle', (await owner.circlesImIn()).some((p) => p.id === hubby.id))
 
     // Future visits flow through
-    await owner.createVisit({ restaurantId: r1.id, visitedAt: new Date(), notes: 'Birthday', personIds: [sarah.id], dishes: [{ key: 'e', person_id: sarah.id, name: 'Green Curry', rating: 5, would_order_again: true, notes: '' }] })
+    await owner.createVisit({ restaurantId: r1.id, visitedAt: new Date(), notes: 'Birthday', personIds: [sarah.id], dishes: [{ key: 'e', person_id: sarah.id, name: 'Green Curry', rating: 5, would_order_again: true, notes: '', photo: null }] })
     check('new visit with Sarah shows up for wife', (await wife.visits(r1.id)).length === 2)
 
     // Stranger
@@ -181,6 +271,48 @@ async function main() {
     await stranger.claimInvite(zaynCode)
     const added = await stranger.linkBack(OWNER, null)
     check('sharing back adds the owner under their name', added.name === 'Saif' && added.linked_user_id === OWNER && !added.is_me, added)
+
+    // Photos: attached to the visit, visible to whoever can see the visit
+    const terroni = await owner.restaurantForPlace({ ...pai, id: 'osm:node/3003', name: 'Terroni', latitude: 43.6455, longitude: -79.395 })
+    const jpeg = (text: string) => new Blob([text], { type: 'image/jpeg' })
+    failUploads = 1
+    const saved = await owner.createVisit({
+      restaurantId: terroni.id,
+      visitedAt: new Date(),
+      notes: '',
+      personIds: [me.id, sarah.id],
+      dishes: [
+        { key: 'p1', person_id: me.id, name: 'Margherita', rating: 5, would_order_again: true, notes: '', photo: jpeg('pizza') },
+        { key: 'p2', person_id: sarah.id, name: 'Tiramisu', rating: 4, would_order_again: true, notes: '', photo: jpeg('cake') },
+        { key: 'p3', person_id: sarah.id, name: 'Sparkling Water', rating: 3, would_order_again: false, notes: '', photo: null },
+      ],
+    })
+    check('visit is saved even when a photo upload fails', saved.pendingPhotos.length === 1 && (await owner.visits(terroni.id)).length === 1, saved.pendingPhotos)
+    const withPhotos = async () => (await owner.visits(terroni.id))[0].dishes.filter((d) => d.photo_path)
+    check('only the photo that uploaded is attached', (await withPhotos()).length === 1)
+    check('retrying uploads the rest', (await owner.retryPhotos(saved.visitId, saved.pendingPhotos)).length === 0)
+    const photoDishes = await withPhotos()
+    check('photos live in the visit folder', photoDishes.length === 2 && photoDishes.every((d) => d.photo_path === `${OWNER}/${saved.visitId}/${d.id}.jpg`), photoDishes)
+    const paths = photoDishes.map((d) => d.photo_path!)
+    check('owner gets photo links', Object.keys(await owner.photoUrls(paths)).length === 2)
+    const wifeTerroni = await wife.visits(terroni.id)
+    check('companion on the visit sees its photos', wifeTerroni[0]?.dishes.filter((d) => d.photo_path).length === 2 && Object.keys(await wife.photoUrls(paths)).length === 2)
+    check('someone not on the visit gets no photo links', Object.keys(await stranger.photoUrls(paths)).length === 0)
+
+    const ownerClient = clientFor(proxy.url, OWNER)
+    const wifeClient = clientFor(proxy.url, WIFE)
+    const water = (await owner.visits(terroni.id))[0].dishes.find((d) => d.name === 'Sparkling Water')!
+    const moved = await ownerClient.from('dishes').update({ photo_path: `${OWNER}/${visits[1].id}/${water.id}.jpg` }).eq('id', water.id)
+    check("a dish can't point at a photo in another visit's folder", /photo_path_in_visit_folder/.test(moved.error?.message ?? ''), moved.error)
+    const intoOwners = await wifeClient.storage.from('dish-photos').upload(`${OWNER}/${saved.visitId}/${water.id}.jpg`, jpeg('x'))
+    const intoOwn = await wifeClient.storage.from('dish-photos').upload(`${WIFE}/${saved.visitId}/${water.id}.jpg`, jpeg('x'))
+    check("companion can't add photos to someone else's visit", intoOwners.error !== null && intoOwn.error !== null)
+    const wifeRemove = await wifeClient.storage.from('dish-photos').remove(paths)
+    check("companion can't remove the owner's photos", (wifeRemove.data ?? []).length === 0 && Object.keys(await owner.photoUrls(paths)).length === 2)
+
+    await owner.deleteVisit(saved.visitId)
+    const left = await ownerClient.schema('storage').from('objects').select('name').like('name', `${OWNER}/${saved.visitId}/%`)
+    check('deleting a visit removes its photos', left.error === null && left.data.length === 0, left)
 
     // Delete
     await owner.deleteVisit(visits[0].id)

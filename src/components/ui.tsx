@@ -97,3 +97,23 @@ export function ErrorNote({ message, onDismiss }: { message: string | null; onDi
 export function Spinner() {
   return <div className="spinner" aria-label="Loading" />
 }
+
+/** A square dish photo thumbnail. Tapping it opens the photo full size. */
+export function DishPhoto({ url, name, size = 'small', onOpen }: { url: string | null | undefined; name: string; size?: 'small' | 'large'; onOpen?: () => void }) {
+  if (!url) return null
+  const img = <img src={url} alt={`Photo of ${name}`} loading="lazy" />
+  if (!onOpen) return <span className={`dish-photo ${size}`}>{img}</span>
+  return (
+    <button type="button" className={`dish-photo ${size}`} onClick={onOpen} aria-label={`View photo of ${name}`}>
+      {img}
+    </button>
+  )
+}
+
+export function PhotoViewer({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+  return (
+    <Sheet title={name} onClose={onClose}>
+      <img className="photo-full" src={url} alt={`Photo of ${name}`} />
+    </Sheet>
+  )
+}

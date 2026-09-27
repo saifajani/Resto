@@ -1,4 +1,4 @@
-import type { NewVisit, Person, Place, Profile, Restaurant, Visit, VisitedRestaurant } from './types'
+import type { NewVisit, PendingPhoto, Person, Place, Profile, Restaurant, SavedVisit, Visit, VisitedRestaurant } from './types'
 
 export type AuthListener = (userId: string | null) => void
 
@@ -17,7 +17,13 @@ export interface Backend {
   visitedRestaurants(): Promise<VisitedRestaurant[]>
 
   visits(restaurantId: string): Promise<Visit[]>
-  createVisit(visit: NewVisit): Promise<void>
+  /** Saves the visit, then uploads its photos. Photos that fail come back in pendingPhotos. */
+  createVisit(visit: NewVisit): Promise<SavedVisit>
+  /** Uploads photos for a saved visit again. Returns the ones that still failed. */
+  retryPhotos(visitId: string, photos: PendingPhoto[]): Promise<PendingPhoto[]>
+  /** Short-lived links for showing photos, keyed by photo_path. Missing ones are left out. */
+  photoUrls(paths: string[]): Promise<Record<string, string>>
+  /** Also removes the visit's photos. */
   deleteVisit(id: string): Promise<void>
 
   myCircle(): Promise<Person[]>

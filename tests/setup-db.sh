@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Starts a throwaway Postgres + PostgREST with the Resto schema for tests/db.test.ts.
+# Starts a throwaway Postgres + PostgREST with the Resto schema for tests/db-integration.ts.
+# The storage schema is exposed too, so the test's fake Storage API can run as each user.
 # Usage: tests/setup-db.sh <postgres-bin-dir> <postgrest-binary>
 # Needs to run as a user that can run initdb (not root). Stop with: pg_ctl -D $DIR/data stop; kill the postgrest pid.
 set -euo pipefail
@@ -15,7 +16,8 @@ rm -rf "$DIR" && mkdir -p "$DIR"
 PSQL="psql -h $DIR -p $PORT -U postgres -X -q -v ON_ERROR_STOP=1"
 $PSQL -c "create database resto"
 
-# Minimal stand-ins for what Supabase provides: roles, auth.users and auth.uid().
+# Minimal stand-ins for what Supabase provides: roles, auth.users, auth.uid(),
+# and the storage tables that Storage's row-level security runs against.
 $PSQL -d resto <<'SQL'
 create role anon nologin;
 create role authenticated nologin;
@@ -28,6 +30,23 @@ create function auth.uid() returns uuid language sql stable as $$
 $$;
 grant usage on schema auth, public to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
+create schema storage;
+create table storage.buckets (
+  id text primary key, name text not null, public boolean not null default false,
+  file_size_limit bigint, allowed_mime_types text[]
+);
+create table storage.objects (
+  id uuid primary key default gen_random_uuid(),
+  bucket_id text not null references storage.buckets (id),
+  name text not null,
+  owner uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  unique (bucket_id, name)
+);
+alter table storage.objects enable row level security;
+grant usage on schema storage to anon, authenticated;
+grant select on storage.buckets to authenticated;
+grant select, insert, update, delete on storage.objects to authenticated;
 alter default privileges in schema public grant all on tables to anon, authenticated;
 SQL
 for migration in "$ROOT"/supabase/migrations/*.sql; do $PSQL -d resto -f "$migration"; done
@@ -35,7 +54,7 @@ $PSQL -d resto -c "insert into auth.users (id) values ('11111111-1111-1111-1111-
 
 cat > "$DIR/postgrest.conf" <<CONF
 db-uri = "postgres://authenticator:authenticator@/resto?host=$DIR&port=$PORT"
-db-schemas = "public"
+db-schemas = "public,storage"
 db-anon-role = "anon"
 jwt-secret = "test-secret-test-secret-test-secret-1234"
 server-host = "127.0.0.1"

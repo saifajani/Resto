@@ -4,7 +4,7 @@ An app for remembering what you and the people you eat with ordered at restauran
 
 - **Nearby:** restaurants around you (from Google Places), with places you've been before pinned to the top. Search by name too.
 - **Restaurant page:** a "what to order" summary for each person (latest rating, reorder flag, how many times ordered), then the full visit history.
-- **Log a visit:** pick who was there, then add dishes with 1 to 5 stars, a "would order again" toggle and notes. Dishes from past visits autocomplete.
+- **Log a visit:** pick who was there, then add dishes with 1 to 5 stars, a "would order again" toggle, notes and an optional photo (take one or pick from the library). Dishes from past visits autocomplete.
 - **People:** your circle. The people you eat with don't need an account. When they sign up, send them an invite code and they'll see every visit you logged with them, including future ones (read only).
 
 It's a mobile web app you add to your iPhone Home Screen. It's built with Vite, React, TypeScript and Supabase, deployed on Vercel, and laid out like Schedule1. See [CLAUDE.md](CLAUDE.md) for the architecture and the day-to-day workflow (`push` and `ship it`).
@@ -108,7 +108,7 @@ Open the Vercel address in **Safari**, then tap **Share > Add to Home Screen**. 
 - Every account has its own circle of people, starting with you.
 - Each dish is attributed to a person in the circle of whoever logged the visit.
 - **Invite** creates a 6-character code for a person in your circle. When someone redeems it, their account is linked to that person.
-- Linked accounts can read every visit their person was on (all dishes on those visits, not just their own), now and in future. They can't edit or delete them.
+- Linked accounts can read every visit their person was on (all dishes and photos on those visits, not just their own), now and in future. They can't edit or delete them.
 - All of this is enforced by Postgres row-level security, not just in the app.
 
 ## Restaurant data

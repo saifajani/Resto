@@ -45,7 +45,29 @@ const photonFixture = {
   ],
 }
 
+/** A 1x1 PNG, standing in for a photo from the camera. */
+const PHOTO = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64')
+
 let failures = 0
+async function expectPhoto(page: Page, name: string, label: string) {
+  try {
+    await page.getByRole('img', { name: `Photo of ${name}` }).first().waitFor({ state: 'visible', timeout: 5000 })
+    // Visible isn't enough: wait for the image itself to load (or fail).
+    const loaded = await page.getByRole('img', { name: `Photo of ${name}` }).first().evaluate((img: HTMLImageElement) =>
+      img.complete
+        ? img.naturalWidth > 0
+        : new Promise<boolean>((resolve) => {
+            img.addEventListener('load', () => resolve(true), { once: true })
+            img.addEventListener('error', () => resolve(false), { once: true })
+          }),
+    )
+    console.log(`${loaded ? 'PASS' : 'FAIL'}  ${label}`)
+    if (!loaded) failures++
+  } catch {
+    console.log(`FAIL  ${label}`)
+    failures++
+  }
+}
 async function expectVisible(page: Page, text: string | RegExp, label = String(text)) {
   try {
     await page.getByText(text).first().waitFor({ state: 'visible', timeout: 5000 })
@@ -148,6 +170,9 @@ async function main() {
     await page.getByRole('radio', { name: '5 stars' }).click()
     await page.getByText('Would order again').click()
     await page.getByLabel('Notes').last().fill('Ask for extra lime')
+    await page.getByLabel('Choose a photo').setInputFiles({ name: 'khao-soi.png', mimeType: 'image/png', buffer: PHOTO })
+    await expectPhoto(page, 'Khao Soi', 'photo shows in the dish sheet')
+    await expectVisible(page, 'Replace photo', 'photo can be replaced or removed')
     await shot(page, '03-dish-editor')
     // The sheet should read as its own screen: near the top on a phone, with the action pinned at the bottom.
     const sheetBox = await page.locator('.sheet').boundingBox()
@@ -155,6 +180,7 @@ async function main() {
     if (sheetBox && sheetBox.y < 120 && addBox && addBox.y > 844 - 140) console.log('PASS  dish sheet is tall with its button at the bottom')
     else { console.log(`FAIL  dish sheet layout ${JSON.stringify({ sheetBox, addBox })}`); failures++ }
     await page.getByRole('button', { name: 'Add dish', exact: true }).click()
+    await expectPhoto(page, 'Khao Soi', 'photo thumbnail shows in the draft dish list')
 
     await page.getByRole('button', { name: '+ Add a dish' }).click()
     await expectVisible(page, 'Sarah', 'next dish defaults to next person')
@@ -165,14 +191,31 @@ async function main() {
     await page.getByRole('button', { name: 'Add dish', exact: true }).click()
     await page.getByPlaceholder('Anything worth remembering').fill('Friday night, 40 min wait')
     await shot(page, '04-log-visit')
+    // The photo upload fails once, as on a weak connection: the visit saves, and the photo can be retried.
+    await page.evaluate(() => (globalThis.__restoFailPhotoUploads = 1))
     await page.getByRole('button', { name: /Save visit \(2 dishes\)/ }).click()
+    await expectVisible(page, 'Your visit is saved', 'failed photo upload is explained')
+    await expectVisible(page, /the photo of Khao Soi didn't upload/, 'names the dish whose photo failed')
+    await shot(page, '04b-photo-failed')
+    await page.getByRole('button', { name: 'Try again' }).click()
 
     // History
     await expectVisible(page, 'What to order', 'summary appears after saving')
     await expectVisible(page, 'Your dishes', 'your dishes group')
     await expectVisible(page, "Sarah's dishes", "Sarah's dishes group")
     await expectVisible(page, 'Friday night, 40 min wait', 'visit notes shown')
+    await expectPhoto(page, 'Khao Soi', 'photo shows on the restaurant screen after retrying')
     await shot(page, '05-restaurant-history')
+    await page.getByRole('button', { name: 'View photo of Khao Soi' }).first().click()
+    try {
+      await page.locator('.sheet .photo-full').waitFor({ state: 'visible', timeout: 5000 })
+      console.log('PASS  photo opens full size')
+    } catch {
+      console.log('FAIL  photo opens full size')
+      failures++
+    }
+    await shot(page, '05b-photo-full')
+    await page.getByRole('button', { name: 'Close' }).click()
 
     // Second visit reusing a suggested dish
     await page.getByRole('link', { name: '+ Log a visit' }).click()
@@ -245,6 +288,7 @@ async function main() {
     await expectTheme(page, 'dark', 'automatic reacts to the system turning dark')
     await page.getByRole('button', { name: /Pai Northern Thai/ }).first().click()
     await expectVisible(page, 'What to order', 'dark mode page renders')
+    await expectPhoto(page, 'Khao Soi', 'photo survives a reload')
     await shot(page, '10-dark-mode')
 
     // Location denied

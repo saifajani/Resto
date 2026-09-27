@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { backend } from '../lib/config'
 import { knownDishNames } from '../lib/summary'
-import { displayName, type DraftDish, type Person, type Restaurant } from '../lib/types'
+import { shrinkPhoto } from '../lib/photo'
+import { displayName, type DraftDish, type PendingPhoto, type Person, type Restaurant } from '../lib/types'
 import { useUserId } from '../session'
-import { ErrorNote, ReorderBadge, Sheet, StarPicker, Stars } from '../components/ui'
+import { DishPhoto, ErrorNote, ReorderBadge, Sheet, StarPicker, Stars } from '../components/ui'
+import { useObjectUrl } from '../lib/useObjectUrl'
 import { errorMessage } from '../lib/format'
 
 function today(): string {
@@ -31,6 +33,8 @@ export default function LogVisit() {
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Set once the visit is saved but some photos still need uploading. */
+  const [saved, setSaved] = useState<{ visitId: string; pending: PendingPhoto[]; retried: boolean } | null>(null)
 
   useEffect(() => {
     const known = passed?.id === id ? passed : null
@@ -77,7 +81,7 @@ export default function LogVisit() {
   const startDish = () => {
     const withDishes = new Set(dishes.map((d) => d.person_id))
     const personId = selectedPeople.find((p) => !withDishes.has(p.id))?.id ?? dishes.at(-1)?.person_id ?? selectedPeople[0].id
-    setEditing({ key: newKey(), person_id: personId, name: '', rating: 0, would_order_again: false, notes: '' })
+    setEditing({ key: newKey(), person_id: personId, name: '', rating: 0, would_order_again: false, notes: '', photo: null })
   }
 
   const saveDish = (dish: DraftDish) => {
@@ -85,28 +89,49 @@ export default function LogVisit() {
     setEditing(null)
   }
 
+  const done = () => navigate(`/r/${id}`, { replace: true, state: { restaurant } })
+
   const save = async () => {
     setSaving(true)
     setError(null)
     try {
-      await backend.createVisit({
+      const result = await backend.createVisit({
         restaurantId: id,
         visitedAt: date === today() ? new Date() : new Date(`${date}T19:00:00`),
         notes,
         personIds: [...selected],
         dishes,
       })
-      navigate(`/r/${id}`, { replace: true, state: { restaurant } })
+      if (result.pendingPhotos.length === 0) return done()
+      setSaved({ visitId: result.visitId, pending: result.pendingPhotos, retried: false })
     } catch (e) {
       setError(errorMessage(e))
-      setSaving(false)
     }
+    setSaving(false)
+  }
+
+  const retryPhotos = async () => {
+    if (!saved) return
+    setSaving(true)
+    try {
+      const pending = await backend.retryPhotos(saved.visitId, saved.pending)
+      if (pending.length === 0) return done()
+      setSaved({ ...saved, pending, retried: true })
+    } catch {
+      setSaved({ ...saved, retried: true })
+    }
+    setSaving(false)
   }
 
   const cancel = () => {
+    if (saved) return done()
     if (dishes.length && !confirm('Discard this visit?')) return
     navigate(-1)
   }
+
+  const hasPhotos = dishes.some((d) => d.photo)
+  const failedNames = saved ? saved.pending.map((p) => dishes.find((d) => d.key === p.key)?.name ?? 'a dish') : []
+  const one = saved?.pending.length === 1
 
   return (
     <>
@@ -118,6 +143,7 @@ export default function LogVisit() {
         </div>
       </header>
 
+      <fieldset className="plain" disabled={saved !== null}>
       <section className="form-section">
         <label className="field">
           <span>When</span>
@@ -152,6 +178,7 @@ export default function LogVisit() {
           <ul className="dish-list editable">
             {dishes.map((dish) => (
               <li key={dish.key}>
+                <DraftPhoto dish={dish} />
                 <button className="dish-main as-button" onClick={() => setEditing(dish)}>
                   <div className="dish-name">{dish.name}</div>
                   <div className="dish-who">{nameOf(dish.person_id)}</div>
@@ -174,13 +201,37 @@ export default function LogVisit() {
           <textarea rows={2} placeholder="Anything worth remembering about the visit?" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
       </section>
+      </fieldset>
 
       <ErrorNote message={error} onDismiss={() => setError(null)} />
 
       <div className="save-bar">
-        <button className="primary wide" onClick={save} disabled={saving || dishes.length === 0 || selected.size === 0}>
-          {saving ? 'Saving…' : dishes.length === 0 ? 'Add a dish to save' : `Save visit (${dishes.length} dish${dishes.length === 1 ? '' : 'es'})`}
-        </button>
+        {saved ? (
+          <div className="photo-failed-bar">
+            {/* In the pinned bar so it can't be missed below the fold. */}
+            <div className="photo-failed" role="alert">
+              <p>
+                <strong>Your visit is saved</strong>, but {one ? 'the photo' : `${saved.pending.length} photos`} of{' '}
+                {listNames(failedNames)} didn't upload. This usually means the connection dropped.
+              </p>
+              <p>
+                {saved.retried
+                  ? `Still couldn't upload. Try again when you have a better signal, or skip and keep the visit without ${one ? 'it' : 'them'}.`
+                  : `The ${one ? 'photo is' : 'photos are'} still here, so you can try again now or skip ${one ? 'it' : 'them'}.`}
+              </p>
+            </div>
+            <div className="choices">
+              <button className="secondary" onClick={done} disabled={saving}>Skip {one ? 'photo' : 'photos'}</button>
+              <button className="primary" onClick={retryPhotos} disabled={saving}>{saving ? 'Uploading…' : 'Try again'}</button>
+            </div>
+          </div>
+        ) : (
+          <button className="primary wide" onClick={save} disabled={saving || dishes.length === 0 || selected.size === 0}>
+            {saving
+              ? hasPhotos ? 'Saving visit and photos…' : 'Saving…'
+              : dishes.length === 0 ? 'Add a dish to save' : `Save visit (${dishes.length} dish${dishes.length === 1 ? '' : 'es'})`}
+          </button>
+        )}
       </div>
 
       {editing && (
@@ -195,6 +246,15 @@ export default function LogVisit() {
       )}
     </>
   )
+}
+
+/** "Khao Soi", "Khao Soi and Pad Thai", "Khao Soi, Pad Thai and Fries" */
+function listNames(names: string[]): string {
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+}
+
+function DraftPhoto({ dish }: { dish: DraftDish }) {
+  return <DishPhoto url={useObjectUrl(dish.photo)} name={dish.name} />
 }
 
 function DishEditor(props: {
@@ -212,6 +272,22 @@ function DishEditor(props: {
     .filter((s) => (typed ? s.toLowerCase().includes(typed) && s.toLowerCase() !== typed : true))
     .slice(0, 8)
   const valid = dish.name.trim().length > 0 && dish.rating >= 1
+  const photoUrl = useObjectUrl(dish.photo)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [preparing, setPreparing] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
+
+  const pickPhoto = async (file: File | undefined) => {
+    if (!file) return
+    setPreparing(true)
+    setPhotoError(null)
+    try {
+      update({ photo: await shrinkPhoto(file) })
+    } catch (e) {
+      setPhotoError(errorMessage(e))
+    }
+    setPreparing(false)
+  }
 
   return (
     <Sheet
@@ -219,7 +295,7 @@ function DishEditor(props: {
       onClose={props.onCancel}
       footer={
         <>
-          <button className="primary wide" disabled={!valid} onClick={() => props.onSave({ ...dish, name: dish.name.trim(), notes: dish.notes.trim() })}>
+          <button className="primary wide" disabled={!valid || preparing} onClick={() => props.onSave({ ...dish, name: dish.name.trim(), notes: dish.notes.trim() })}>
             {props.dish.name ? 'Save dish' : 'Add dish'}
           </button>
           {!valid && <span className="hint">{dish.name.trim() ? 'Tap a star rating to add it' : 'Enter a dish name and rating'}</span>}
@@ -259,6 +335,36 @@ function DishEditor(props: {
         <input type="checkbox" checked={dish.would_order_again} onChange={(e) => update({ would_order_again: e.target.checked })} />
         <span className="switch" aria-hidden="true" />
       </label>
+
+      <div className="field">
+        <span>Photo</span>
+        {/* No capture attribute, so iPhone offers both Take Photo and Photo Library. */}
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/*"
+          hidden
+          aria-label="Choose a photo"
+          onChange={(e) => {
+            pickPhoto(e.target.files?.[0])
+            e.target.value = ''
+          }}
+        />
+        {preparing ? (
+          <p className="muted small">Preparing photo…</p>
+        ) : photoUrl ? (
+          <div className="photo-field">
+            <DishPhoto url={photoUrl} name={dish.name || 'this dish'} size="large" />
+            <div className="stack">
+              <button type="button" className="link" onClick={() => fileInput.current?.click()}>Replace photo</button>
+              <button type="button" className="link danger" onClick={() => update({ photo: null })}>Remove photo</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="secondary" onClick={() => fileInput.current?.click()}>Add photo</button>
+        )}
+        <ErrorNote message={photoError} onDismiss={() => setPhotoError(null)} />
+      </div>
 
       <label className="field">
         <span>Notes</span>

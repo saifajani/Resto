@@ -12,7 +12,11 @@ Set `CHROMIUM_PATH` if Chromium isn't at `/opt/pw-browsers/chromium-1194/chrome-
 
 ## `npm run test:db`
 
-Runs the real Supabase backend code (`src/lib/supabaseBackend.ts`) against Postgres and [PostgREST](https://postgrest.org), the same pieces Supabase uses, with every file in `supabase/migrations/` applied. It plays three users (an owner, a companion who redeems an invite, and a stranger) and checks every sharing rule.
+Runs the real Supabase backend code (`src/lib/supabaseBackend.ts`) against Postgres and [PostgREST](https://postgrest.org), the same pieces Supabase uses, with every file in `supabase/migrations/` applied. It plays three users (an owner, a companion who redeems an invite, and a stranger) and checks every sharing rule, including who can see, add and remove dish photos.
+
+Plain PostgREST has no Storage API, so `setup-db.sh` creates a minimal `storage` schema (`buckets` and `objects`, with row-level security on) and exposes it, and the test's proxy fakes the few Storage calls the app makes. Each fake call reads or writes `storage.objects` as the signed-in user, so the bucket policies from the migrations decide, just as in Supabase. The proxy can also fail uploads on purpose, to test the retry path.
+
+The test leaves data behind, so run `setup-db.sh` again before each `npm run test:db`.
 
 Start the database first. This needs Postgres 15+ and the PostgREST binary, and has to run as a user that can run `initdb` (not root):
 
