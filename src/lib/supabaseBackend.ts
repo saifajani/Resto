@@ -167,6 +167,10 @@ export function createSupabaseBackend(
       return check(await client.rpc('claim_invite', { p_code: code }).single<Person>())
     },
 
+    async linkBack(ownerId, personId) {
+      return check(await client.rpc('link_back', { p_owner_id: ownerId, p_person_id: personId }).single<Person>())
+    },
+
     async myProfile() {
       return check(await client.from('profiles').select('display_name').eq('id', userId()).single<Profile>())
     },

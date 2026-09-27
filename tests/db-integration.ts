@@ -152,6 +152,22 @@ async function main() {
     check('wife cannot delete owner\'s visit', (await owner.visits(r1.id)).length === 2)
     await rejects('invite code is single use', () => stranger.claimInvite(code), /not valid/)
 
+    // Sharing back: the companion links the owner into her own circle
+    await rejects('stranger cannot share back without an invite', () => stranger.linkBack(OWNER, null), /whose invite/)
+    const wifeMe = (await wife.myCircle()).find((p) => p.is_me)!
+    await rejects('cannot share back as your own "me"', () => wife.linkBack(OWNER, wifeMe.id), /not joined yet/)
+    const hubby = await wife.addPerson('Hubby')
+    await wife.createVisit({ restaurantId: other.id, visitedAt: new Date('2026-09-01T23:00:00Z'), notes: 'Date night', personIds: [wifeMe.id, hubby.id], dishes: [] })
+    check('owner cannot see wife\'s visit before she shares back', (await owner.visits(other.id)).length === 0)
+    const back = await wife.linkBack(OWNER, hubby.id)
+    check('wife links the owner as Hubby', back.id === hubby.id && back.linked_user_id === OWNER, back)
+    const ownerSees = await owner.visits(other.id)
+    check('owner now sees wife\'s past visit with him', ownerSees.length === 1 && ownerSees[0].notes === 'Date night', ownerSees)
+    await owner.deleteVisit(ownerSees[0].id)
+    check('owner cannot delete wife\'s visit', (await wife.visits(other.id)).length === 1)
+    check('sharing back again is a no-op', (await wife.linkBack(OWNER, null)).id === hubby.id)
+    check('owner\'s circle shows wife\'s circle', (await owner.circlesImIn()).some((p) => p.id === hubby.id))
+
     // Future visits flow through
     await owner.createVisit({ restaurantId: r1.id, visitedAt: new Date(), notes: 'Birthday', personIds: [sarah.id], dishes: [{ key: 'e', person_id: sarah.id, name: 'Green Curry', rating: 5, would_order_again: true, notes: '' }] })
     check('new visit with Sarah shows up for wife', (await wife.visits(r1.id)).length === 2)
@@ -159,6 +175,12 @@ async function main() {
     // Stranger
     check('stranger sees no visits', (await stranger.visits(r1.id)).length === 0 && (await stranger.visitedRestaurants()).length === 0)
     check('stranger sees only their own person', (await stranger.myCircle()).length === 1)
+
+    // Sharing back as a new person
+    const zaynCode = await owner.createInvite(zayn.id)
+    await stranger.claimInvite(zaynCode)
+    const added = await stranger.linkBack(OWNER, null)
+    check('sharing back adds the owner under their name', added.name === 'Saif' && added.linked_user_id === OWNER && !added.is_me, added)
 
     // Delete
     await owner.deleteVisit(visits[0].id)

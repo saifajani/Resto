@@ -3,6 +3,7 @@ import { backend } from '../lib/config'
 import type { Person } from '../lib/types'
 import { ErrorNote, Sheet, Spinner } from '../components/ui'
 import { errorMessage } from '../lib/format'
+import { LinkBackSheet } from '../components/LinkBackSheet'
 
 type Invite = { personName: string; code: string }
 
@@ -11,6 +12,7 @@ export default function People() {
   const [joined, setJoined] = useState<Person[]>([])
   const [newName, setNewName] = useState('')
   const [invite, setInvite] = useState<Invite | null>(null)
+  const [linkBack, setLinkBack] = useState<{ id: string; name: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -93,7 +95,7 @@ export default function People() {
         </form>
         <p className="fine-print padded">
           People you eat with don't need an account. If they want to see your visits with them, tap Invite and send them the code.
-          Once they sign in and enter it, they'll see every visit you've logged with them, including future ones.
+          Once they sign in and enter it, you'll each see every visit the other has logged with you, including future ones.
         </p>
       </section>
 
@@ -107,6 +109,15 @@ export default function People() {
                   <div className="row-title">{p.owner?.display_name ?? 'Someone'}'s circle</div>
                   <div className="row-sub">They added you as {p.name}</div>
                 </div>
+                {circle?.some((mine) => mine.linked_user_id === p.owner_id) ? (
+                  <span className="badge yes">Both ways</span>
+                ) : (
+                  circle && (
+                    <button className="secondary small" onClick={() => setLinkBack({ id: p.owner_id, name: p.owner?.display_name ?? p.name })}>
+                      Share back
+                    </button>
+                  )
+                )}
               </li>
             ))}
           </ul>
@@ -114,13 +125,24 @@ export default function People() {
       )}
 
       {invite && <InviteSheet invite={invite} onClose={() => setInvite(null)} />}
+      {linkBack && (
+        <LinkBackSheet
+          ownerId={linkBack.id}
+          ownerName={linkBack.name}
+          onClose={() => setLinkBack(null)}
+          onDone={(person) => {
+            setCircle((c) => [...(c ?? []).filter((x) => x.id !== person.id), person])
+            setLinkBack(null)
+          }}
+        />
+      )}
     </>
   )
 }
 
 function InviteSheet({ invite, onClose }: { invite: Invite; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
-  const message = `I'm using Resto to keep track of what we order at restaurants. Open ${window.location.origin}, sign in, and enter invite code ${invite.code} on the Profile tab to see our visits.`
+  const message = `I'm using Resto to keep track of what we order at restaurants. Open ${window.location.origin}, sign in, and enter invite code ${invite.code} on the Profile tab so we can both see our visits together.`
 
   const share = async () => {
     if (navigator.share) {
@@ -144,7 +166,7 @@ function InviteSheet({ invite, onClose }: { invite: Invite; onClose: () => void 
       <div className="invite">
         <p className="muted">Send {invite.personName} this code:</p>
         <div className="invite-code">{invite.code}</div>
-        <p className="muted">When {invite.personName} enters it in Resto, they'll see every visit you've logged with them.</p>
+        <p className="muted">When {invite.personName} enters it in Resto, they'll see every visit you've logged with them, and you'll see the ones they log with you.</p>
       </div>
     </Sheet>
   )

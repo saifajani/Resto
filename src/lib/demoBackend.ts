@@ -204,6 +204,10 @@ export function createDemoBackend(): Backend {
       throw new Error('Invites need the real backend. The demo only keeps data on this device.')
     },
 
+    async linkBack() {
+      throw new Error('Invites need the real backend. The demo only keeps data on this device.')
+    },
+
     async myProfile() {
       return store.profile
     },

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { backend } from '../lib/config'
 import { ErrorNote } from '../components/ui'
+import { LinkBackSheet } from '../components/LinkBackSheet'
 import { errorMessage } from '../lib/format'
 import { readThemeChoice, saveThemeChoice, THEME_CHOICES, type ThemeChoice } from '../lib/theme'
 
@@ -12,6 +13,7 @@ export default function Profile() {
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice)
+  const [inviter, setInviter] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => {
     backend.myProfile().then((p) => {
@@ -64,7 +66,10 @@ export default function Profile() {
           run(e, async () => {
             const person = await backend.claimInvite(code)
             setCode('')
-            return `You're in. Visits logged with ${person.name} now show up on your restaurant pages.`
+            const circle = (await backend.circlesImIn()).find((p) => p.id === person.id)
+            const ownerName = circle?.owner?.display_name ?? person.name
+            setInviter({ id: person.owner_id, name: ownerName })
+            return `You're in. Visits ${ownerName} logged with you now show up on your restaurant pages.`
           })
         }
       >
@@ -79,12 +84,26 @@ export default function Profile() {
             autoComplete="off"
           />
         </label>
-        <p className="fine-print">Enter the code a friend or family member sent you to see the visits they've logged with you.</p>
+        <p className="fine-print">
+          Enter the code a friend or family member sent you. You'll see the visits they've logged with you, and they'll see the ones you log with them.
+        </p>
         <button className="secondary" disabled={busy || code.length < 6}>Join</button>
       </form>
 
       {status && <p className="success-note" role="status">{status}</p>}
       <ErrorNote message={error} onDismiss={() => setError(null)} />
+
+      {inviter && (
+        <LinkBackSheet
+          ownerId={inviter.id}
+          ownerName={inviter.name}
+          onClose={() => setInviter(null)}
+          onDone={() => {
+            setStatus(`You and ${inviter.name} now see each other's visits together.`)
+            setInviter(null)
+          }}
+        />
+      )}
 
       <div className="form-section">
         <h2>Appearance</h2>

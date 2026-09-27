@@ -150,6 +150,7 @@ Supabase Auth with **emailed 6-digit codes** (`signInWithOtp` + `verifyOtp`), no
 
 - Every user owns a circle (`people`, with one `is_me` row). Visits and dishes belong to whoever logged them, and each dish is attributed to a person in that circle.
 - `create_invite(person_id)` makes a 6-character code. `claim_invite(code)` sets `people.linked_user_id`, which gives that account **read-only** access to every visit the person was on, including future ones.
+- Invites work **both ways**. Right after `claim_invite`, the app shows a "Share back" sheet (`src/components/LinkBackSheet.tsx`) asking which of the redeemer's own people is the inviter (a name match is preselected, or "Not in my list" adds them). That calls `link_back(owner_id, person_id)`, which links the inviter into the redeemer's circle. It only works for someone whose invite you've redeemed, and is a no-op if already linked. Skipping it leaves the link one-way; People > "Circles you're in" then shows a **Share back** button.
 - Helper functions (`can_view_visit`, `can_view_person`, `can_view_profile`, `owns_visit`, `owns_person`) are `SECURITY DEFINER` so that policies don't recurse.
 - Writes that must be atomic go through RPCs: `create_visit` (visit, people and dishes in one transaction), `get_or_create_restaurant`, `set_display_name`.
 

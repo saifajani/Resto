@@ -26,6 +26,8 @@ export interface Backend {
   deletePerson(id: string): Promise<void>
   createInvite(personId: string): Promise<string>
   claimInvite(code: string): Promise<Person>
+  /** After redeeming an invite, links its sender into your circle: an existing person, or a new one when personId is null. */
+  linkBack(ownerId: string, personId: string | null): Promise<Person>
 
   myProfile(): Promise<Profile>
   setDisplayName(name: string): Promise<void>
