@@ -8,10 +8,16 @@ import type { Place } from '../types'
  * personal app easily stays within.
  */
 
+// Tried in order. Public mirrors come and go (in September 2026 overpass-api.de
+// answered every browser request with 406 and private.coffee stopped
+// responding), so keep several, and give each only a few seconds.
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
 ]
+const OVERPASS_TIMEOUT_MS = 8000
 const PHOTON_URL = 'https://photon.komoot.io/api/'
 const FOOD_AMENITIES = ['restaurant', 'cafe', 'fast_food', 'bar', 'pub', 'food_court', 'ice_cream', 'biergarten']
 
@@ -57,12 +63,17 @@ export async function nearbyPlaces(lat: number, lon: number, radius = 800, signa
   const query = `[out:json][timeout:20];nwr(around:${radius},${lat},${lon})["amenity"~"^(${FOOD_AMENITIES.join('|')})$"]["name"];out center tags 80;`
   let lastError: unknown
   for (const endpoint of OVERPASS_ENDPOINTS) {
+    // A mirror that never answers would otherwise hang the list until the phone gives up.
+    const attempt = new AbortController()
+    const timer = setTimeout(() => attempt.abort(), OVERPASS_TIMEOUT_MS)
+    const onAbort = () => attempt.abort()
+    signal?.addEventListener('abort', onAbort)
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `data=${encodeURIComponent(query)}`,
-        signal,
+        signal: attempt.signal,
       })
       if (!response.ok) throw new Error(`Overpass ${response.status}`)
       const json = (await response.json()) as { elements: OverpassElement[] }
@@ -87,6 +98,9 @@ export async function nearbyPlaces(lat: number, lon: number, radius = 800, signa
     } catch (error) {
       if (signal?.aborted) throw error
       lastError = error
+    } finally {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
     }
   }
   throw lastError
