@@ -651,6 +651,11 @@ button.row:active {
   margin-right: 16px;
 }
 
+/* Sits under the "Add a person" row, and needs to look like its own action. */
+.invite-someone {
+  margin-top: 12px;
+}
+
 .fine-print {
   font-size: 13px;
   color: var(--muted);

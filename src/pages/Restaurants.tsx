@@ -208,7 +208,7 @@ export default function Restaurants() {
           {status !== 'denied' && (
             <section>
               <h2>
-                Nearby
+                Where are you?
                 {coords && (
                   <button className="link small" onClick={reload}>Refresh</button>
                 )}

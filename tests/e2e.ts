@@ -193,6 +193,7 @@ async function main() {
     await page.getByRole('button', { name: 'Try the demo' }).click()
 
     // Nearby
+    await expectVisible(page, 'Where are you?', 'the list asks which restaurant you are at')
     await expectVisible(page, 'Pai Northern Thai', 'nearby restaurants load')
     await expectVisible(page, 'Thai · 18 Duncan Street', 'cuisine and address shown')
     await expectVisible(page, /^\d+ m$/, 'distance shown')
@@ -322,6 +323,18 @@ async function main() {
     // Remove Sarah's dish's person blocked
     await page.getByRole('link', { name: 'People' }).click()
     await expectVisible(page, 'Your circle', 'people screen')
+
+    // Inviting someone who isn't in the circle yet: one button, not "add them
+    // first, then find the Invite button on their row".
+    await page.getByRole('button', { name: 'Invite someone' }).click()
+    await expectVisible(page, 'Who are you inviting?', 'invite sheet asks for a name')
+    await page.getByPlaceholder('Their name').fill('Aunt May')
+    await page.getByRole('button', { name: 'Get their code' }).click()
+    // Demo mode has no invites, so the code fails and says so. The person is
+    // added either way, which is what the real backend does too.
+    await expectVisible(page, 'Invites need the real backend', 'demo says invites need the real backend')
+    await page.getByRole('button', { name: 'Close' }).click()
+    await expectVisible(page, 'Aunt May', 'the invited person joins your circle')
     await page.getByRole('button', { name: 'Remove Sarah' }).click()
     await expectVisible(page, "has dishes logged", 'cannot remove person with dishes')
     await shot(page, '08-people')

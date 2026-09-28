@@ -13,6 +13,7 @@ export default function People() {
   const [newName, setNewName] = useState('')
   const [invite, setInvite] = useState<Invite | null>(null)
   const [linkBack, setLinkBack] = useState<{ id: string; name: string } | null>(null)
+  const [invitingNew, setInvitingNew] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -45,6 +46,21 @@ export default function People() {
     } catch (err) {
       setError(errorMessage(err))
     }
+  }
+
+  /**
+   * Invites someone who isn't in the circle yet. An invite code always points
+   * at a person, since that is what the code links their account to, so this
+   * adds them first rather than asking the user to do it in two steps.
+   */
+  const inviteSomeone = async (name: string) => {
+    const person = await backend.addPerson(name)
+    setCircle((c) => [...(c ?? []), person])
+    // The sheet stays open until there is a code, so that if making one fails
+    // the sheet is still there to say so. The person is added either way.
+    const code = await backend.createInvite(person.id)
+    setInvitingNew(false)
+    setInvite({ personName: person.name, code })
   }
 
   const makeInvite = async (person: Person) => {
@@ -93,9 +109,12 @@ export default function People() {
           <input placeholder="Add a person" value={newName} onChange={(e) => setNewName(e.target.value)} autoCapitalize="words" />
           <button className="secondary" disabled={!newName.trim()}>Add</button>
         </form>
+        <div className="padded invite-someone">
+          <button className="secondary wide" onClick={() => setInvitingNew(true)}>Invite someone</button>
+        </div>
         <p className="fine-print padded">
-          People you eat with don't need an account. If they want to see what you've been ordering, tap Invite and send them the code.
-          Once they sign in and enter it, they'll see every visit you log, past and future. You'll see theirs when they share back.
+          People you eat with don't need an account. Tap Invite on someone's row, or Invite someone for anybody new, and send them the code.
+          Once they enter it, they'll see every visit you log, past and future. You'll see theirs when they share back.
         </p>
       </section>
 
@@ -124,6 +143,12 @@ export default function People() {
         </section>
       )}
 
+      {invitingNew && (
+        <InviteSomeoneSheet
+          onClose={() => setInvitingNew(false)}
+          onInvite={inviteSomeone}
+        />
+      )}
       {invite && <InviteSheet invite={invite} onClose={() => setInvite(null)} />}
       {linkBack && (
         <LinkBackSheet
@@ -137,6 +162,48 @@ export default function People() {
         />
       )}
     </>
+  )
+}
+
+/** Asks who is being invited, then hands the name back to be added and invited. */
+function InviteSomeoneSheet({ onClose, onInvite }: { onClose: () => void; onInvite: (name: string) => Promise<void> }) {
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!name.trim() || busy) return
+    setBusy(true)
+    try {
+      await onInvite(name.trim())
+    } catch (err) {
+      setError(errorMessage(err))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Sheet
+      title="Invite someone"
+      onClose={onClose}
+      footer={
+        <button className="primary wide" disabled={!name.trim() || busy} onClick={submit}>
+          {busy ? 'Making a code' : 'Get their code'}
+        </button>
+      }
+    >
+      <form onSubmit={submit}>
+        <ErrorNote message={error} onDismiss={() => setError(null)} />
+        <label className="field padded">
+          <span>Who are you inviting?</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} autoCapitalize="words" autoFocus placeholder="Their name" />
+        </label>
+        <p className="fine-print padded">
+          They'll be added to your circle, so you can pick them when you log a visit.
+        </p>
+      </form>
+    </Sheet>
   )
 }
 

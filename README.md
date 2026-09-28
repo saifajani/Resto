@@ -2,7 +2,7 @@
 
 An app for remembering what you and the people you eat with ordered at restaurants, and whether it was worth ordering again.
 
-- **Nearby:** restaurants around you (from Google Places), with places you've been before pinned to the top. Search by name too.
+- **Where are you?:** restaurants around you (from Google Places), with places you've been before pinned to the top. It answers "which of these am I sitting in", rather than being a search. Search by name too.
 - **Restaurant page:** a "what to order" summary for each person (latest rating, reorder flag, how many times ordered), then the full visit history.
 - **Log a visit:** pick who was there, then add dishes with 1 to 5 stars, a "would order again" toggle, notes and an optional photo (take one or pick from the library). Dishes from past visits autocomplete.
 - **People:** your circle. The people you eat with don't need an account. When they sign up, send them an invite code and they'll see every visit you logged with them, including future ones (read only).
