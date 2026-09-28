@@ -651,6 +651,13 @@ button.row:active {
   margin-right: 16px;
 }
 
+/* Says why a form can't be sent, right under the field it's about. */
+.field-hint {
+  margin: -4px 0 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
 /* Sits under the "Add a person" row, and needs to look like its own action. */
 .invite-someone {
   margin-top: 12px;

@@ -189,7 +189,12 @@ async function main() {
     await page.goto(BASE)
     await expectVisible(page, 'Try the demo', 'sign-in screen shows')
     await shot(page, '01-sign-in')
+    // The button stays tappable when the field is empty, and says what's wrong.
+    await page.getByRole('button', { name: 'Try the demo' }).click()
+    await expectVisible(page, 'Enter your first name', 'empty sign-in field explains itself')
+    await shot(page, '01b-sign-in-hint')
     await page.getByLabel('Your first name').fill('Saif')
+    ok('the hint clears as soon as you type', (await page.locator('.field-hint').count()) === 0)
     await page.getByRole('button', { name: 'Try the demo' }).click()
 
     // Nearby
