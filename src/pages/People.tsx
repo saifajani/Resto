@@ -113,8 +113,7 @@ export default function People() {
           <button className="secondary wide" onClick={() => setInvitingNew(true)}>Invite someone</button>
         </div>
         <p className="fine-print padded">
-          People you eat with don't need an account. Tap Invite on someone's row, or Invite someone for anybody new, and send them the code.
-          Once they enter it, they'll see every visit you log, past and future. You'll see theirs when they share back.
+          People you eat with don't need an account. Invite someone if you want to share your visit log with them and to see theirs once they share back.
         </p>
       </section>
 
