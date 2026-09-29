@@ -31,9 +31,15 @@ const NEARBY_FIXTURE = [
   { key: 'raval', name: 'Bar Raval', address: '505 College Street', type: 'Tapas', cuisine: 'tapas', lat: 43.6487, lon: -79.395 },
   { key: 'alo', name: 'Alo', address: '163 Spadina Avenue', type: 'French', cuisine: 'french', lat: 43.6487, lon: -79.39 },
   { key: 'momofuku', name: 'Momofuku', address: '190 University Avenue', type: 'Asian', cuisine: 'asian', lat: 43.6487, lon: -79.3945 },
+  // Two branches of one chain, named the way Google names them.
+  { key: 'jackfront', name: "Jack Astor's Bar & Grill Front Street", address: '144 Front Street West', type: 'Bar & Grill', cuisine: 'american', lat: 43.6487, lon: -79.3965 },
+  { key: 'jackairport', name: "Jack Astor's Bar & Grill Airport", address: '25 Carlson Court', type: 'Bar & Grill', cuisine: 'american', lat: 43.6487, lon: -79.3975 },
 ]
 /** Nearest first, as the screen should end up showing them. */
-const BY_DISTANCE = ['Cafe Landwer', 'Byblos', 'Kinka Izakaya', 'Pai Northern Thai', 'Alo', 'Canoe', 'Richmond Station', 'Momofuku', 'Bar Raval', 'Terroni']
+const BY_DISTANCE = [
+  'Cafe Landwer', 'Byblos', 'Kinka Izakaya', 'Pai Northern Thai', 'Alo', 'Canoe', 'Richmond Station',
+  'Momofuku', 'Bar Raval', 'Terroni', "Jack Astor's Bar & Grill Front Street", "Jack Astor's Bar & Grill Airport",
+]
 
 const googleNearbyFixture = {
   places: NEARBY_FIXTURE.map((p) => ({
@@ -302,6 +308,33 @@ async function main() {
     ok('a place nobody has been to has no mark', (await page.getByRole('img', { name: /has been here/ }).count()) === 0)
     await expectVisible(page, '2 visits', 'your restaurants shows visit count')
     await shot(page, '06-nearby-visited')
+
+    // Chains: a dish rated at one branch has to reach the other, because the
+    // menu is the same even though Google calls them different places.
+    await page.getByRole('button', { name: 'Show more' }).click()
+    await page.getByRole('button', { name: /Jack Astor.s Bar & Grill Front Street/ }).click()
+    await page.getByRole('link', { name: '+ Log a visit' }).click()
+    await page.getByRole('button', { name: '+ Add a dish' }).click()
+    await page.getByLabel('Dish', { exact: true }).fill('Nachos')
+    await page.getByRole('radio', { name: '4 stars' }).click()
+    await page.getByRole('button', { name: 'Add dish', exact: true }).click()
+    await page.getByRole('button', { name: /Save visit \(1 dish\)/ }).click()
+    await expectVisible(page, 'Past visits', 'visit logged at the first branch')
+
+    await page.getByRole('link', { name: 'Restaurants' }).click()
+    await page.getByRole('button', { name: 'Show more' }).click()
+    ok(
+      'the other branch is flagged as a chain you have eaten at',
+      (await page.getByRole('img', { name: /another location of this chain/ }).count()) === 1,
+    )
+    await shot(page, '06b-chain-mark')
+    await page.getByRole('button', { name: /Jack Astor.s Bar & Grill Airport/ }).click()
+    await expectVisible(page, 'No visits yet', 'the other branch has no visits of its own')
+    await expectVisible(page, 'Other locations', 'and still shows what was ordered at the first')
+    await expectVisible(page, 'Nachos', 'the dish carries across branches')
+    await expectVisible(page, '144 Front Street West', 'with the branch it was ordered at')
+    await shot(page, '06c-other-locations')
+    await page.getByRole('link', { name: 'Restaurants' }).click()
 
     // Search
     await page.getByLabel('Search restaurants').fill('pai')

@@ -651,6 +651,13 @@ button.row:active {
   margin-right: 16px;
 }
 
+/* Another branch of a chain you've eaten at. A different shape and colour
+   from the check marks, because it is a different claim: not "you have been
+   here" but "you have notes that probably apply here". */
+.visited-mark.chain circle {
+  stroke: var(--accent);
+}
+
 /* Says why a form can't be sent, right under the field it's about. */
 .field-hint {
   margin: -4px 0 0;

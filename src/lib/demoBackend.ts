@@ -166,6 +166,11 @@ export function createDemoBackend(): Backend {
       return store.visits.filter((v) => v.restaurant_id === restaurantId).sort(newestFirst).map(toVisit)
     },
 
+    async visitsAt(restaurantIds) {
+      const wanted = new Set(restaurantIds)
+      return store.visits.filter((v) => wanted.has(v.restaurant_id)).sort(newestFirst).map(toVisit)
+    },
+
     async createVisit(visit: NewVisit) {
       const id = uuid()
       const pending: PendingPhoto[] = []

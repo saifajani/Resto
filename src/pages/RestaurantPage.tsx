@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { backend } from '../lib/config'
-import { summarize } from '../lib/summary'
+import { sameChain } from '../lib/chain'
+import { summarize, type DishSummary, type SummaryGroup } from '../lib/summary'
 import { displayName, visitPeople, type Restaurant, type Visit } from '../lib/types'
 import { useUserId } from '../session'
 import { DishPhoto, ErrorNote, PhotoViewer, ReorderBadge, Spinner, Stars } from '../components/ui'
@@ -17,6 +18,8 @@ export default function RestaurantPage() {
   const [error, setError] = useState<string | null>(null)
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
   const [viewing, setViewing] = useState<{ url: string; name: string } | null>(null)
+  /** The same chain, somewhere else: what was ordered at each other branch. */
+  const [elsewhere, setElsewhere] = useState<{ restaurant: Restaurant; groups: SummaryGroup[] }[]>([])
 
   const load = useCallback(async () => {
     try {
@@ -39,12 +42,55 @@ export default function RestaurantPage() {
     load()
   }, [load])
 
+  // Branches of the same chain share a menu, so a dish rated at one is worth
+  // knowing about at another. Kept apart from this location's own history: it
+  // is a different restaurant, however similar the menu.
+  useEffect(() => {
+    if (!restaurant) return
+    let cancelled = false
+    const run = async () => {
+      const others = (await backend.visitedRestaurants())
+        .map((v) => v.restaurant)
+        .filter((r) => r.id !== restaurant.id && sameChain(r.name, restaurant.name))
+      if (!others.length || cancelled) return
+      const visitsThere = await backend.visitsAt(others.map((r) => r.id))
+      if (cancelled) return
+      setElsewhere(
+        others
+          .map((r) => ({ restaurant: r, groups: summarize(visitsThere.filter((v) => v.restaurant_id === r.id), userId) }))
+          .filter((branch) => branch.groups.length > 0),
+      )
+      const paths = visitsThere.flatMap((v) => v.dishes.flatMap((d) => (d.photo_path ? [d.photo_path] : [])))
+      backend.photoUrls(paths).then((urls) => setPhotoUrls((p) => ({ ...p, ...urls })), () => {})
+    }
+    // Extra context, so a failure here must not take the page down with it.
+    run().catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [restaurant, userId])
+
   const photo = (path: string | null, name: string) => {
     const url = path ? photoUrls[path] : undefined
     return <DishPhoto url={url} name={name} onOpen={url ? () => setViewing({ url, name }) : undefined} />
   }
 
   const groups = useMemo(() => summarize(visits ?? [], userId), [visits, userId])
+
+  const summaryRow = (item: DishSummary) => (
+    <li key={item.key}>
+      {photo(item.photoPath, item.name)}
+      <div className="dish-main">
+        <div className="dish-name">
+          {item.name}
+          {item.timesOrdered > 1 && <span className="times">×{item.timesOrdered}</span>}
+        </div>
+        {item.notes && <div className="dish-notes">{item.notes}</div>}
+      </div>
+      <Stars rating={item.rating} />
+      <ReorderBadge yes={item.wouldOrderAgain} />
+    </li>
+  )
 
   const deleteVisit = async (visit: Visit) => {
     if (!confirm(`Delete the visit on ${formatDate(visit.visited_at)}? This removes every dish logged on it.`)) return
@@ -93,22 +139,7 @@ export default function RestaurantPage() {
           {groups.map((group) => (
             <section key={group.key} className="card">
               <h3>{group.title}</h3>
-              <ul className="dish-list">
-                {group.items.map((item) => (
-                  <li key={item.key}>
-                    {photo(item.photoPath, item.name)}
-                    <div className="dish-main">
-                      <div className="dish-name">
-                        {item.name}
-                        {item.timesOrdered > 1 && <span className="times">×{item.timesOrdered}</span>}
-                      </div>
-                      {item.notes && <div className="dish-notes">{item.notes}</div>}
-                    </div>
-                    <Stars rating={item.rating} />
-                    <ReorderBadge yes={item.wouldOrderAgain} />
-                  </li>
-                ))}
-              </ul>
+              <ul className="dish-list">{group.items.map(summaryRow)}</ul>
             </section>
           ))}
 
@@ -153,6 +184,25 @@ export default function RestaurantPage() {
               </section>
             )
           })}
+        </>
+      )}
+
+      {elsewhere.length > 0 && (
+        <>
+          <h2 className="section-title">Other locations</h2>
+          <p className="fine-print padded">Same chain, so the menu is probably the same. These visits were somewhere else.</p>
+          {elsewhere.map((branch) => (
+            <section key={branch.restaurant.id} className="card">
+              <h3>{branch.restaurant.name}</h3>
+              {branch.restaurant.address && <p className="muted small">{branch.restaurant.address}</p>}
+              {branch.groups.map((group) => (
+                <div key={group.key}>
+                  <p className="dish-who">{group.title}</p>
+                  <ul className="dish-list">{group.items.map(summaryRow)}</ul>
+                </div>
+              ))}
+            </section>
+          ))}
         </>
       )}
 

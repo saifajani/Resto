@@ -130,6 +130,18 @@ export function createSupabaseBackend(
       )
     },
 
+    async visitsAt(restaurantIds) {
+      if (!restaurantIds.length) return []
+      return check(
+        await client
+          .from('visits')
+          .select(VISIT_COLUMNS)
+          .in('restaurant_id', restaurantIds)
+          .order('visited_at', { ascending: false })
+          .returns<Visit[]>(),
+      )
+    },
+
     async createVisit(visit: NewVisit) {
       // Ids are chosen here so each photo's folder is known before it uploads.
       const visitId = uuid()

@@ -4,9 +4,10 @@ import { backend } from '../lib/config'
 import { useLocation, type Coords } from '../lib/location'
 import { formatDistance, nearbyPlaces, placesProvider, resolvePlace, searchPlaces } from '../lib/places'
 import type { Place, VisitedRestaurant } from '../lib/types'
-import { ErrorNote, Spinner, VisitedMark } from '../components/ui'
+import { ErrorNote, Spinner, VisitedMark, type Been } from '../components/ui'
 import { errorMessage, formatDate } from '../lib/format'
 import { usePullToRefresh } from '../lib/usePullToRefresh'
+import { sameChain } from '../lib/chain'
 
 /** How many nearby places to show before the "Show more" button. */
 const NEARBY_PAGE = 8
@@ -31,7 +32,7 @@ export default function Restaurants() {
   const trimmed = query.trim()
   /** place id -> whether you were there yourself, or only someone else in your circle. */
   const visitedPlaces = useMemo(() => {
-    const map = new Map<string, 'me' | 'circle'>()
+    const map = new Map<string, Been>()
     for (const m of mine) {
       if (!m.restaurant.place_id) continue
       if (m.myLastVisit) map.set(m.restaurant.place_id, 'me')
@@ -113,13 +114,21 @@ export default function Restaurants() {
     }
   }
 
+  /**
+   * The mark on a row: where you've been wins, then your circle, and failing
+   * both, another branch of the same chain, whose menu is probably the same.
+   */
+  const markFor = (place: Place): Been | undefined =>
+    visitedPlaces.get(place.id) ??
+    (mine.some((m) => sameChain(m.restaurant.name, place.name)) ? 'chain' : undefined)
+
   const placeRow = (place: Place) => (
     <li key={place.id}>
       <button className="row" onClick={() => open(place)} disabled={opening !== null}>
         <div className="row-main">
           <div className="row-title">
             {place.name}
-            {visitedPlaces.has(place.id) && <VisitedMark who={visitedPlaces.get(place.id)!} />}
+            {markFor(place) && <VisitedMark who={markFor(place)!} />}
           </div>
           <div className="row-sub">{[place.cuisine, place.address].filter(Boolean).join(' · ')}</div>
         </div>

@@ -222,6 +222,11 @@ async function main() {
     check('failed visit left nothing behind', (await owner.visits(r1.id)).length === 2)
     await rejects('cannot delete a person with dishes', () => owner.deletePerson(sarah.id), /has dishes logged/)
 
+    // Several restaurants at once, which is how a chain's other branches load
+    const across = await owner.visitsAt([r1.id, other.id])
+    check('visitsAt returns visits for every restaurant asked for', across.length === 2 && across.every((v) => v.restaurant_id === r1.id), across.map((v) => v.restaurant_id))
+    check('visitsAt with no ids asks nothing', (await owner.visitsAt([])).length === 0)
+
     // Invites
     const code = await owner.createInvite(sarah.id)
     check('invite code looks right', /^[A-Z2-9]{6}$/.test(code), code)

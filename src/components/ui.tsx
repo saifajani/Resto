@@ -31,16 +31,35 @@ export function StarPicker({ value, onChange }: { value: number; onChange: (n: n
 }
 
 /**
- * Marks a nearby restaurant someone has already eaten at: filled when you were
- * there yourself, an outline when it was someone else in your circle.
+ * Marks a restaurant in the nearby list. Filled when you were there yourself,
+ * an outline when it was someone else in your circle, and two linked rings
+ * when nobody has been to this one but you have been to another branch of the
+ * same chain, where the menu is probably the same.
  */
-export function VisitedMark({ who }: { who: 'me' | 'circle' }) {
-  const label = who === 'me' ? "You've been here" : 'Someone in your circle has been here'
+export type Been = 'me' | 'circle' | 'chain'
+
+const LABELS: Record<Been, string> = {
+  me: "You've been here",
+  circle: 'Someone in your circle has been here',
+  chain: "You've been to another location of this chain",
+}
+
+export function VisitedMark({ who }: { who: Been }) {
+  const label = LABELS[who]
   return (
     <svg className={`visited-mark ${who}`} viewBox="0 0 16 16" width="15" height="15" role="img" aria-label={label}>
       <title>{label}</title>
-      <circle cx="8" cy="8" r="6.75" />
-      <path d="M5.1 8.4 7 10.3 10.9 6.2" />
+      {who === 'chain' ? (
+        <>
+          <circle cx="5.75" cy="8" r="4.25" />
+          <circle cx="10.25" cy="8" r="4.25" />
+        </>
+      ) : (
+        <>
+          <circle cx="8" cy="8" r="6.75" />
+          <path d="M5.1 8.4 7 10.3 10.9 6.2" />
+        </>
+      )}
     </svg>
   )
 }
