@@ -1076,3 +1076,376 @@ fieldset.plain:disabled {
 .save-bar .choices > * {
   flex: 1;
 }
+
+/* Invites */
+
+.invite-banner {
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin: 0;
+  font-size: 14px;
+  text-align: center;
+}
+
+.invite-url {
+  color: var(--accent);
+  word-break: break-all;
+}
+
+/* The join screen reuses the sign-in layout, but inside the tabbed page. */
+.page .signin {
+  min-height: 0;
+  padding-top: 24px;
+}
+
+/* Add to Home Screen */
+
+.ath-steps {
+  margin: 4px 0 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  line-height: 1.45;
+}
+
+.ath-steps li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.inline-glyph {
+  vertical-align: -4px;
+  color: var(--accent);
+  margin: 0 1px;
+}
+
+/*
+ * The three steps, drawn and animated rather than recorded: it weighs nothing,
+ * follows the palette, and can't go stale. One 6.5s loop drives every part,
+ * so the percentages below are shared timings, not independent ones:
+ *   0.0s tap Share . 1.8s sheet up . 3.1s tap the row . 4.3s Home Screen
+ */
+.ath-anim {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 18px;
+}
+
+.ath-phone {
+  width: 180px;
+  padding: 6px;
+  border-radius: 28px;
+  background: var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.ath-screen {
+  position: relative;
+  height: 300px;
+  border-radius: 22px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.ath-page {
+  position: absolute;
+  inset: 0 0 40px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  animation: ath-page-out 6.5s ease-in-out infinite;
+}
+
+.ath-page-logo {
+  width: 46px;
+  height: 46px;
+}
+
+.ath-page-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ath-line {
+  width: 98px;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.ath-line.short {
+  width: 66px;
+}
+
+.ath-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40px;
+  z-index: 2;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  color: var(--muted);
+  font-size: 15px;
+  animation: ath-page-out 6.5s ease-in-out infinite;
+}
+
+.ath-bar-share {
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+}
+
+.ath-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  padding: 4px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transform: translateY(110%);
+  animation: ath-sheet-up 6.5s ease-in-out infinite;
+}
+
+.ath-sheet-grabber {
+  width: 28px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  margin: 3px auto 5px;
+}
+
+.ath-sheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.ath-sheet-row-add {
+  color: var(--text);
+  font-weight: 600;
+  animation: ath-row-on 6.5s ease-in-out infinite;
+}
+
+.ath-row-glyph {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.ath-home {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  padding: 26px 14px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px 10px;
+  align-content: start;
+  background: linear-gradient(160deg, var(--accent-soft), var(--surface-2));
+  opacity: 0;
+  animation: ath-home-in 6.5s ease-in-out infinite;
+}
+
+.ath-home-icon {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 9px;
+  background: var(--surface);
+  opacity: 0.5;
+}
+
+.ath-home-icon-new {
+  opacity: 1;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  animation: ath-icon-pop 6.5s ease-in-out infinite;
+}
+
+.ath-home-icon-new img {
+  width: 100%;
+  height: 100%;
+  border-radius: 9px;
+}
+
+.ath-home-label {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  color: var(--text);
+}
+
+.ath-tap {
+  position: absolute;
+  z-index: 5;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--accent-soft);
+  opacity: 0;
+}
+
+.ath-tap-share {
+  /* Third of the four evenly spaced toolbar buttons. */
+  left: calc(62.5% - 15px);
+  bottom: 5px;
+  animation: ath-tap-share 6.5s ease-in-out infinite;
+}
+
+.ath-tap-row {
+  /* Over the row's own + glyph, so the words stay readable under it. */
+  left: calc(86% - 15px);
+  bottom: 35px;
+  animation: ath-tap-row 6.5s ease-in-out infinite;
+}
+
+@keyframes ath-sheet-up {
+  0%,
+  27% {
+    transform: translateY(110%);
+  }
+  33%,
+  62% {
+    transform: translateY(0);
+  }
+  67%,
+  100% {
+    transform: translateY(110%);
+  }
+}
+
+@keyframes ath-row-on {
+  0%,
+  50% {
+    background: var(--surface);
+  }
+  54%,
+  62% {
+    background: var(--accent-soft);
+  }
+  67%,
+  100% {
+    background: var(--surface);
+  }
+}
+
+@keyframes ath-page-out {
+  0%,
+  62% {
+    opacity: 1;
+  }
+  68%,
+  95% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes ath-home-in {
+  0%,
+  62% {
+    opacity: 0;
+  }
+  68%,
+  95% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes ath-icon-pop {
+  0%,
+  66% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  74% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  80%,
+  95% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes ath-tap-share {
+  0%,
+  8% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  12% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  22% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
+@keyframes ath-tap-row {
+  0%,
+  44% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  48% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  56% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
+/* Nothing moves, so the numbered steps carry it on their own. */
+@media (prefers-reduced-motion: reduce) {
+  .ath-anim {
+    display: none;
+  }
+}

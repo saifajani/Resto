@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import { backend } from '../lib/config'
 import { ErrorNote } from '../components/ui'
 import { errorMessage } from '../lib/format'
+import { armInstallNudge } from '../lib/install'
+import { inviteCodeFromPath } from '../lib/invite'
 
 /** Deliberately loose: the real check is whether the code arrives. */
 const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -15,6 +18,8 @@ export default function SignIn() {
   const [error, setError] = useState<string | null>(null)
   /** Why the form can't be sent yet. Shown only once they've tried. */
   const [hint, setHint] = useState<string | null>(null)
+  /** Set when they arrived on an invite link. The code is redeemed after signing in. */
+  const invited = inviteCodeFromPath(useLocation().pathname)
 
   const run = async (e: FormEvent, action: () => Promise<void>) => {
     e.preventDefault()
@@ -50,11 +55,20 @@ export default function SignIn() {
       <h1>Resto</h1>
       <p className="muted">Remember what everyone ordered, and whether it was worth ordering again.</p>
 
+      {invited && (
+        <p className="invite-banner">
+          You've been invited to a circle. Sign in with your email and we'll add code <strong>{invited}</strong> next.
+        </p>
+      )}
+
       {backend.mode === 'demo' ? (
         <form
           className="stack"
           noValidate
-          onSubmit={(e) => guard(e, !!name.trim(), 'Enter your first name so the app knows what to call you.', () => backend.startDemo(name))}
+          onSubmit={(e) => guard(e, !!name.trim(), 'Enter your first name so the app knows what to call you.', async () => {
+            await backend.startDemo(name)
+            armInstallNudge()
+          })}
         >
           <label className="field">
             <span>Your first name</span>

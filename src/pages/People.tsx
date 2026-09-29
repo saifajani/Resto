@@ -4,6 +4,7 @@ import type { Person } from '../lib/types'
 import { ErrorNote, Sheet, Spinner } from '../components/ui'
 import { errorMessage } from '../lib/format'
 import { LinkBackSheet } from '../components/LinkBackSheet'
+import { inviteLink } from '../lib/invite'
 
 type Invite = { personName: string; code: string }
 
@@ -210,10 +211,13 @@ function InviteSheet({ invite, onClose }: { invite: Invite; onClose: () => void 
   const [copied, setCopied] = useState(false)
   // The app first: someone who has it installed should not be sent to a browser
   // tab, which is a separate copy with its own storage and its own sign-in.
+  // The link is the second line for exactly that reason: it is for the person
+  // who hasn't got Resto yet, and it carries the code through signing up.
+  const link = inviteLink(window.location.origin, invite.code)
   const message = [
     `I'm using Resto to keep track of what we order at restaurants.`,
-    `Join my circle so we can see each other's ratings. Open the app and enter invite code ${invite.code} on the Profile tab.`,
-    `If you don't have it yet, open ${window.location.origin}, sign in, and enter the code ${invite.code} on the Profile tab.`,
+    `Join my circle so we can see each other's ratings. If you already have Resto, open it and enter invite code ${invite.code} on the Profile tab.`,
+    `If you don't have it yet, start here and it will set you up: ${link}`,
   ].join('\n\n')
 
   const share = async () => {
@@ -239,6 +243,7 @@ function InviteSheet({ invite, onClose }: { invite: Invite; onClose: () => void 
         <p className="muted">Send {invite.personName} this code:</p>
         <div className="invite-code">{invite.code}</div>
         <p className="muted">When {invite.personName} enters it in Resto, they'll see every visit you log, not only the ones you were both on. You'll see theirs when they share back.</p>
+        <p className="fine-print">Send invite shares the code and this link, which sets them up if they don't have Resto yet: <span className="invite-url">{link}</span></p>
       </div>
     </Sheet>
   )

@@ -9,6 +9,8 @@ import RestaurantPage from './pages/RestaurantPage'
 import LogVisit from './pages/LogVisit'
 import People from './pages/People'
 import Profile from './pages/Profile'
+import JoinInvite from './pages/JoinInvite'
+import { InstallNudge } from './components/AddToHomeScreen'
 
 type State = { status: 'loading' } | { status: 'signedOut' } | { status: 'signedIn'; userId: string; needsName: boolean }
 
@@ -48,7 +50,9 @@ export default function App() {
 
 function Shell() {
   const location = useLocation()
-  const hideTabs = location.pathname.endsWith('/log')
+  // Both are single steps with their own way out, so the tabs would only be a
+  // way to lose your place halfway through.
+  const hideTabs = location.pathname.endsWith('/log') || location.pathname.startsWith('/join/')
   return (
     <>
       {backend.mode === 'demo' && (
@@ -59,11 +63,13 @@ function Shell() {
           <Route path="/" element={<Restaurants />} />
           <Route path="/r/:id" element={<RestaurantPage />} />
           <Route path="/r/:id/log" element={<LogVisit />} />
+          <Route path="/join/:code" element={<JoinInvite />} />
           <Route path="/people" element={<People />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+      <InstallNudge />
       {!hideTabs && (
         <nav className="tabbar">
           <NavLink to="/" end={false} className={({ isActive }) => (isActive || location.pathname.startsWith('/r/') ? 'active' : '')}>

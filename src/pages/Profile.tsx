@@ -4,6 +4,8 @@ import { ErrorNote } from '../components/ui'
 import { LinkBackSheet } from '../components/LinkBackSheet'
 import { errorMessage } from '../lib/format'
 import { readThemeChoice, saveThemeChoice, THEME_CHOICES, type ThemeChoice } from '../lib/theme'
+import { AddToHomeScreenSheet } from '../components/AddToHomeScreen'
+import { isStandalone } from '../lib/install'
 
 export default function Profile() {
   const [name, setName] = useState('')
@@ -14,6 +16,9 @@ export default function Profile() {
   const [error, setError] = useState<string | null>(null)
   const [theme, setTheme] = useState<ThemeChoice>(readThemeChoice)
   const [inviter, setInviter] = useState<{ id: string; name: string } | null>(null)
+  const [showInstall, setShowInstall] = useState(false)
+  // Nothing to add when this already is the installed app.
+  const [installed] = useState(isStandalone)
 
   useEffect(() => {
     backend.myProfile().then((p) => {
@@ -126,6 +131,16 @@ export default function Profile() {
         </div>
         <p className="fine-print">Automatic follows the light or dark setting on your phone or computer.</p>
       </div>
+
+      {!installed && (
+        <div className="form-section">
+          <h2>Home Screen</h2>
+          <button className="secondary wide" onClick={() => setShowInstall(true)}>Add Resto to your Home Screen</button>
+          <p className="fine-print">It opens full screen, starts faster, and stays signed in.</p>
+        </div>
+      )}
+
+      {showInstall && <AddToHomeScreenSheet onClose={() => setShowInstall(false)} />}
 
       <div className="form-section">
         <button className="danger-button wide" onClick={() => backend.signOut()}>Sign out</button>

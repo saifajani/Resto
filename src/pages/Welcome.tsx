@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { backend } from '../lib/config'
 import { ErrorNote } from '../components/ui'
 import { errorMessage } from '../lib/format'
+import { armInstallNudge } from '../lib/install'
 
 /** First-run prompt so the people you share with see your real name. */
 export default function Welcome({ onDone }: { onDone: () => void }) {
@@ -14,6 +15,10 @@ export default function Welcome({ onDone }: { onDone: () => void }) {
     setBusy(true)
     try {
       await backend.setDisplayName(name.trim())
+      // This is the one screen only a brand new account sees, so it is where
+      // the Add to Home Screen nudge is armed. It appears at the next resting
+      // point, which is after an invite code, if they arrived with one.
+      armInstallNudge()
       onDone()
     } catch (err) {
       setError(errorMessage(err))

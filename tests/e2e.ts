@@ -14,6 +14,9 @@ const BASE = `http://127.0.0.1:${PORT}`
 const HOME = { latitude: 43.6487, longitude: -79.3854 } // downtown Toronto
 const PROVIDER = process.env.PLACES === 'osm' ? 'osm' : 'google'
 const TEST_KEY = 'test-browser-key'
+/** Used for the one pass that should see the iPhone version of the Home Screen nudge. */
+const IPHONE_SAFARI =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
 
 /**
  * Ten places, in no particular order, so the list has to sort them by distance
@@ -203,6 +206,15 @@ async function main() {
     ok('the hint clears as soon as you type', (await page.locator('.field-hint').count()) === 0)
     await page.getByRole('button', { name: 'Try the demo' }).click()
 
+    // Add to Home Screen: shown once, straight after registering.
+    await expectVisible(page, 'Keep Resto one tap away', 'the Home Screen nudge follows registering')
+    // This browser is not iOS Safari, so it gets the short generic version.
+    await expectVisible(page, 'Install app', 'off iOS the nudge falls back to generic steps')
+    ok('the drawn steps are iOS only', (await page.locator('.ath-anim').count()) === 0)
+    await shot(page, '01c-add-to-home')
+    await page.getByRole('button', { name: 'Got it' }).click()
+    ok('Got it closes the nudge', (await page.getByRole('dialog').count()) === 0)
+
     // Nearby
     await expectVisible(page, 'Where are you?', 'the list asks which restaurant you are at')
     await expectVisible(page, 'Pai Northern Thai', 'nearby restaurants load')
@@ -388,6 +400,11 @@ async function main() {
     await shot(page, '09-appearance-dark')
     await page.reload()
     await expectTheme(page, 'dark', 'the chosen theme survives a reload')
+    ok('the Home Screen nudge does not come back', (await page.getByRole('dialog').count()) === 0)
+    // Dismissing it is not a dead end: the steps stay on the Profile tab.
+    await page.getByRole('button', { name: 'Add Resto to your Home Screen' }).click()
+    await expectVisible(page, 'Keep Resto one tap away', 'Profile reopens the Home Screen steps')
+    await page.getByRole('button', { name: 'Got it' }).click()
     await page.getByRole('radio', { name: 'Automatic' }).click()
     await expectTheme(page, 'light', 'back to Automatic follows the system again')
 
@@ -434,9 +451,36 @@ async function main() {
     await expectPhoto(page, 'Khao Soi', 'photo survives a reload')
     await shot(page, '10-dark-mode')
 
+    // An invite link: the code comes first, and the Home Screen nudge waits for it.
+    const invited = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+      geolocation: HOME,
+      permissions: ['geolocation'],
+      // The phone the nudge is written for, so this pass gets the Safari steps.
+      userAgent: IPHONE_SAFARI,
+    })
+    const p3 = await invited.newPage()
+    await p3.goto(`${BASE}/join/ABC234`)
+    await expectVisible(p3, 'ABC234', 'the invite code carries into the sign-in screen')
+    await p3.getByLabel('Your first name').fill('Nadia')
+    await p3.getByRole('button', { name: 'Try the demo' }).click()
+    await expectVisible(p3, "You've been invited", 'an invite link lands on the join screen')
+    ok('the Home Screen nudge waits while there is a code to enter', (await p3.getByRole('dialog').count()) === 0)
+    await shot(p3, '11-join-invite')
+    await p3.getByRole('button', { name: 'Not now' }).click()
+    await expectVisible(p3, 'Keep Resto one tap away', 'the nudge follows the end of the invite flow')
+    await expectVisible(p3, 'Tap the Share button', 'on an iPhone the nudge gives the Safari steps')
+    ok('the steps are drawn, not only written', (await p3.locator('.ath-anim').count()) === 1)
+    await shot(p3, '12-add-to-home-ios')
+    await invited.close()
+
     // Location denied
     const denied = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true })
     // Headless Chromium leaves the permission prompt pending, so simulate the user tapping "Don't Allow".
+    // This context is about the location message, so skip the Home Screen nudge.
+    await denied.addInitScript(() => localStorage.setItem('resto:add-to-home', 'done'))
     await denied.addInitScript(() => {
       navigator.geolocation.getCurrentPosition = (_ok, fail) =>
         fail?.({ code: 1, PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3, message: 'denied' } as GeolocationPositionError)
