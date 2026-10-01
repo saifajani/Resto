@@ -2,7 +2,7 @@ import { groupVisitedRestaurants, type AuthListener, type Backend } from './back
 import { demoPhotos } from './demoPhotoStore'
 import { uuid } from './ids'
 import { photoPath } from './photo'
-import type { Dish, NewVisit, PendingPhoto, Person, Profile, Restaurant, Visit } from './types'
+import type { Dish, FeedVisit, NewVisit, PendingPhoto, Person, Profile, Restaurant, Visit } from './types'
 
 /**
  * A single-user backend that keeps everything in this browser's localStorage.
@@ -10,7 +10,8 @@ import type { Dish, NewVisit, PendingPhoto, Person, Profile, Restaurant, Visit }
  * without any setup. Sharing and invites need the real backend.
  */
 
-type StoredVisit = Omit<Visit, 'owner' | 'visit_people' | 'dishes'> & { person_ids: string[] }
+/** created_at is missing on visits saved before the Feed existed. */
+type StoredVisit = Omit<Visit, 'owner' | 'visit_people' | 'dishes'> & { person_ids: string[]; created_at?: string }
 type StoredDish = Dish & { visit_id: string }
 
 type Store = {
@@ -171,6 +172,18 @@ export function createDemoBackend(): Backend {
       return store.visits.filter((v) => wanted.has(v.restaurant_id)).sort(newestFirst).map(toVisit)
     },
 
+    async feed(limit) {
+      const loggedAt = (v: StoredVisit) => v.created_at ?? v.visited_at
+      return [...store.visits]
+        .sort((a, b) => loggedAt(b).localeCompare(loggedAt(a)))
+        .slice(0, limit)
+        .map((v): FeedVisit => ({
+          ...toVisit(v),
+          created_at: loggedAt(v),
+          restaurant: store.restaurants.find((r) => r.id === v.restaurant_id) ?? null,
+        }))
+    },
+
     async createVisit(visit: NewVisit) {
       const id = uuid()
       const pending: PendingPhoto[] = []
@@ -182,6 +195,7 @@ export function createDemoBackend(): Backend {
         visited_at: visit.visitedAt.toISOString(),
         notes: visit.notes.trim() || null,
         person_ids: personIds,
+        created_at: new Date().toISOString(),
       })
       const now = Date.now()
       visit.dishes.forEach((d, i) => {

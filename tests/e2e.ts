@@ -346,6 +346,16 @@ async function main() {
     await expectVisible(page, 'Nachos', 'the dish carries across branches')
     await expectVisible(page, '144 Front Street West', 'with the branch it was ordered at')
     await shot(page, '06c-other-locations')
+
+    // Feed: every visit, newest logged first, each one a way into its restaurant
+    await page.getByRole('link', { name: 'Feed' }).click()
+    await expectVisible(page, 'The latest visits from you and your circle', 'feed screen')
+    const feedPlaces = await page.locator('.feed-restaurant').allTextContents()
+    ok('feed lists every visit, newest first', feedPlaces.length === 3 && /Jack Astor/.test(feedPlaces[0]), feedPlaces)
+    await expectVisible(page, 'Nachos', 'feed shows the dishes')
+    await shot(page, '06d-feed')
+    await page.locator('.feed-restaurant').first().click()
+    await expectVisible(page, '+ Log a visit', 'a feed entry opens its restaurant')
     await page.getByRole('link', { name: 'Restaurants' }).click()
 
     // Search

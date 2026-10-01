@@ -512,6 +512,18 @@ button.row:active {
   font-weight: 600;
 }
 
+.feed-restaurant {
+  display: block;
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.feed-more {
+  width: 100%;
+}
+
 .visit-notes {
   margin: 8px 0 0;
   font-size: 14px;

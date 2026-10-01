@@ -43,6 +43,12 @@ export type Visit = {
   dishes: Dish[]
 }
 
+/** A visit in the Feed: where it was, and when it was logged, which is what the Feed is ordered by. */
+export type FeedVisit = Visit & {
+  created_at: string
+  restaurant: Restaurant | null
+}
+
 export type VisitedRestaurant = {
   restaurant: Restaurant
   lastVisit: string

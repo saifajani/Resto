@@ -7,6 +7,7 @@ import Welcome from './pages/Welcome'
 import Restaurants from './pages/Restaurants'
 import RestaurantPage from './pages/RestaurantPage'
 import LogVisit from './pages/LogVisit'
+import Feed from './pages/Feed'
 import People from './pages/People'
 import Profile from './pages/Profile'
 import JoinInvite from './pages/JoinInvite'
@@ -64,6 +65,7 @@ function Shell() {
           <Route path="/r/:id" element={<RestaurantPage />} />
           <Route path="/r/:id/log" element={<LogVisit />} />
           <Route path="/join/:code" element={<JoinInvite />} />
+          <Route path="/feed" element={<Feed />} />
           <Route path="/people" element={<People />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -75,6 +77,10 @@ function Shell() {
           <NavLink to="/" end={false} className={({ isActive }) => (isActive || location.pathname.startsWith('/r/') ? 'active' : '')}>
             <TabIcon d="M7 3v8a3 3 0 0 0 6 0V3M10 3v18M18 21V3c-2.5 1.4-4 4.5-4 8 0 2 1.5 3.5 4 3.5" />
             Restaurants
+          </NavLink>
+          <NavLink to="/feed">
+            <TabIcon d="M4 5h16M4 10h16M4 15h10M4 20h7" />
+            Feed
           </NavLink>
           <NavLink to="/people">
             <TabIcon d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21v-1a6 6 0 0 1 12 0v1M16 3.5a4 4 0 0 1 0 7.5M22 21v-1a6 6 0 0 0-4-5.6" />

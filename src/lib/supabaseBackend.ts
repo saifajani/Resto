@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { groupVisitedRestaurants, type AuthListener, type Backend, type VisitedRow } from './backend'
 import { uuid } from './ids'
 import { PHOTO_BUCKET, photoPath } from './photo'
-import type { NewVisit, PendingPhoto, Person, Place, Profile, Restaurant, Visit } from './types'
+import type { FeedVisit, NewVisit, PendingPhoto, Person, Place, Profile, Restaurant, Visit } from './types'
 
 const PERSON_COLUMNS = 'id, owner_id, name, is_me, linked_user_id, invite_code'
 /** How long a photo link works. The restaurant screen asks for fresh ones on every load. */
@@ -139,6 +139,17 @@ export function createSupabaseBackend(
           .in('restaurant_id', restaurantIds)
           .order('visited_at', { ascending: false })
           .returns<Visit[]>(),
+      )
+    },
+
+    async feed(limit) {
+      return check(
+        await client
+          .from('visits')
+          .select(`${VISIT_COLUMNS}, created_at, restaurant:restaurants(*)`)
+          .order('created_at', { ascending: false })
+          .limit(limit)
+          .returns<FeedVisit[]>(),
       )
     },
 

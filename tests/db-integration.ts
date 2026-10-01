@@ -277,11 +277,20 @@ async function main() {
     // Future visits flow through
     await owner.createVisit({ restaurantId: r1.id, visitedAt: new Date(), notes: 'Birthday', personIds: [sarah.id], dishes: [{ key: 'e', person_id: sarah.id, name: 'Green Curry', rating: 5, would_order_again: true, notes: '', photo: null }] })
     check('a new visit shows up for the wife straight away', (await wife.visits(r1.id)).length === 3)
+    const wifeFeed = await wife.feed(20)
+    check(
+      'wife\'s feed has the newest logged visit first, with its restaurant',
+      wifeFeed[0]?.notes === 'Birthday' && wifeFeed[0].restaurant?.id === r1.id && wifeFeed[0].dishes.length === 1,
+      wifeFeed.map((v) => v.notes),
+    )
+    check('wife\'s feed has her own visits and the owner\'s', wifeFeed.some((v) => v.notes === 'Date night') && wifeFeed.some((v) => v.owner_id === OWNER))
+    check('feed honours its limit', (await wife.feed(1)).length === 1)
 
     // Nobody outside a circle sees anything
     check('stranger sees no visits before joining', (await stranger.visits(r1.id)).length === 0 && (await stranger.visitedRestaurants()).length === 0)
     check('stranger sees only their own person', (await stranger.myCircle()).length === 1)
     check('outsider sees nothing at all', (await outsider.visits(r1.id)).length === 0 && (await outsider.visitedRestaurants()).length === 0)
+    check('stranger and outsider have empty feeds', (await stranger.feed(20)).length === 0 && (await outsider.feed(20)).length === 0)
 
     // Sharing back as a new person
     const zaynCode = await owner.createInvite(zayn.id)
@@ -296,6 +305,7 @@ async function main() {
     const solo = await stranger.restaurantForPlace({ ...pai, id: 'osm:node/9009', name: 'Solo Diner', latitude: 43.66, longitude: -79.41 })
     await stranger.createVisit({ restaurantId: solo.id, visitedAt: new Date('2026-07-01T23:00:00Z'), notes: 'Solo lunch', personIds: [strangerMe.id], dishes: [] })
     check('one circle member cannot see another member\'s own visits', (await wife.visits(solo.id)).length === 0)
+    check('nor in the feed', !(await wife.feed(50)).some((v) => v.notes === 'Solo lunch'))
     check('the owner sees them, because the stranger shared back', (await owner.visits(solo.id)).length === 1)
 
     // Photos: attached to the visit, visible to whoever can see the visit

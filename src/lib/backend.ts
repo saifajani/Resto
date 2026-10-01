@@ -1,4 +1,4 @@
-import type { NewVisit, PendingPhoto, Person, Place, Profile, Restaurant, SavedVisit, Visit, VisitedRestaurant } from './types'
+import type { FeedVisit, NewVisit, PendingPhoto, Person, Place, Profile, Restaurant, SavedVisit, Visit, VisitedRestaurant } from './types'
 
 export type AuthListener = (userId: string | null) => void
 
@@ -19,6 +19,8 @@ export interface Backend {
   visits(restaurantId: string): Promise<Visit[]>
   /** Visits at several restaurants at once, for the other branches of a chain. */
   visitsAt(restaurantIds: string[]): Promise<Visit[]>
+  /** The newest visits you can see, yours and your circle's, most recently logged first. */
+  feed(limit: number): Promise<FeedVisit[]>
   /** Saves the visit, then uploads its photos. Photos that fail come back in pendingPhotos. */
   createVisit(visit: NewVisit): Promise<SavedVisit>
   /** Uploads photos for a saved visit again. Returns the ones that still failed. */
