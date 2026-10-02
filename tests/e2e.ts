@@ -353,6 +353,8 @@ async function main() {
     const feedPlaces = await page.locator('.feed-restaurant').allTextContents()
     ok('feed lists every visit, newest first', feedPlaces.length === 3 && /Jack Astor/.test(feedPlaces[0]), feedPlaces)
     await expectVisible(page, 'Nachos', 'feed shows the dishes')
+    ok('each card leads with when it was logged', (await page.getByText('Logged today').count()) === 3)
+    ok('and gives the visit date underneath', (await page.getByText(/^Visit: /).count()) === 3)
     await shot(page, '06d-feed')
     await page.locator('.feed-restaurant').first().click()
     await expectVisible(page, '+ Log a visit', 'a feed entry opens its restaurant')

@@ -4,7 +4,7 @@ import { backend } from '../lib/config'
 import { displayName, visitPeople, type FeedVisit } from '../lib/types'
 import { useUserId } from '../session'
 import { DishPhoto, ErrorNote, PhotoViewer, ReorderBadge, Spinner, Stars } from '../components/ui'
-import { errorMessage, formatDate } from '../lib/format'
+import { errorMessage, formatDate, loggedAgo } from '../lib/format'
 
 /** How many visits to load at a time. */
 const FEED_PAGE = 20
@@ -68,8 +68,10 @@ export default function Feed() {
             const people = visitPeople(visit)
             const personById = new Map(people.map((p) => [p.id, p]))
             const mine = visit.owner_id === userId
-            // Same courtesy as the restaurant screen: you see the date of a
-            // visit you logged or were on, and only what was ordered on the rest.
+            // Same courtesy as the restaurant screen: you see when a visit you
+            // logged or were on happened and was logged, and only what was
+            // ordered on the rest. The Feed is ordered by when it was logged,
+            // so that leads, and the meal date follows in smaller type.
             const wasThere = mine || people.some((p) => p.linked_user_id === userId)
             const dishes = [...visit.dishes].sort((a, b) => a.created_at.localeCompare(b.created_at))
             const who = people.map((p) => displayName(p, userId)).join(', ')
@@ -84,10 +86,13 @@ export default function Feed() {
                     ) : (
                       <span className="feed-restaurant">A restaurant</span>
                     )}
+                    <div className="feed-logged">
+                      {wasThere ? `Logged ${loggedAgo(visit.created_at)}` : 'Logged'}
+                      {!mine && visit.owner && <> by {visit.owner.display_name}</>}
+                    </div>
                     <div className="muted small">
-                      {wasThere && <>{formatDate(visit.visited_at)} · </>}
+                      {wasThere && <>Visit: {formatDate(visit.visited_at)} · </>}
                       {who || 'Nobody listed'}
-                      {!mine && visit.owner && <> · logged by {visit.owner.display_name}</>}
                     </div>
                   </div>
                 </div>

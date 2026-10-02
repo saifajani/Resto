@@ -520,6 +520,12 @@ button.row:active {
   text-decoration: none;
 }
 
+.feed-logged {
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
 .feed-more {
   width: 100%;
 }
