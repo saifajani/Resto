@@ -361,7 +361,7 @@ async function main() {
     await page.getByRole('button', { name: 'Add dish', exact: true }).click()
     ok('choosing someone for a dish adds them to the visit', (await page.getByRole('button', { name: 'Sarah', exact: true }).getAttribute('aria-pressed')) === 'true')
     ok('dishes come first on the page', (await page.locator('.form-section h2').first().textContent()) === 'What everyone ate')
-    await page.getByText("Don't remember the date").click()
+    await page.getByRole('radio', { name: "Don't remember" }).click()
     ok('not remembering the date hides the date field', (await page.getByLabel('Visit date').count()) === 0)
     await page.getByRole('button', { name: /Save visit \(1 dish\)/ }).click()
     await expectVisible(page, 'Past visits', 'visit logged at the first branch')

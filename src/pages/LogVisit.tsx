@@ -247,17 +247,27 @@ export default function LogVisit() {
       </section>
 
       <section className="form-section">
-        {!dateUnknown && (
-          <label className="field">
-            <span>When</span>
+        {/* One choice before the date itself, so "Don't remember" reads as the alternative to a date, not an afterthought. */}
+        <div className="field">
+          <span id="when-label">When</span>
+          <div className="segmented" role="radiogroup" aria-labelledby="when-label">
+            {[false, true].map((unknown) => (
+              <button
+                key={String(unknown)}
+                type="button"
+                role="radio"
+                aria-checked={dateUnknown === unknown}
+                className={dateUnknown === unknown ? 'on' : ''}
+                onClick={() => setDateUnknown(unknown)}
+              >
+                {unknown ? "Don't remember" : 'Pick a date'}
+              </button>
+            ))}
+          </div>
+          {!dateUnknown && (
             <input type="date" aria-label="Visit date" value={date} max={today()} onChange={(e) => setDate(e.target.value || today())} />
-          </label>
-        )}
-        <label className="toggle">
-          <span>Don't remember the date</span>
-          <input type="checkbox" checked={dateUnknown} onChange={(e) => setDateUnknown(e.target.checked)} />
-          <span className="switch" aria-hidden="true" />
-        </label>
+          )}
+        </div>
       </section>
 
       <section className="form-section">
