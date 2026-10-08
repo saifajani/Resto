@@ -356,7 +356,11 @@ async function main() {
     await page.getByRole('button', { name: '+ Add a dish' }).click()
     await page.getByLabel('Dish', { exact: true }).fill('Nachos')
     await page.getByRole('radio', { name: '4 stars' }).click()
+    // Dishes come before who was there, so anyone in the circle can be picked here.
+    await page.locator('.sheet .chip', { hasText: 'Sarah' }).click()
     await page.getByRole('button', { name: 'Add dish', exact: true }).click()
+    ok('choosing someone for a dish adds them to the visit', (await page.getByRole('button', { name: 'Sarah', exact: true }).getAttribute('aria-pressed')) === 'true')
+    ok('dishes come first on the page', (await page.locator('.form-section h2').first().textContent()) === 'What everyone ate')
     await page.getByRole('button', { name: /Save visit \(1 dish\)/ }).click()
     await expectVisible(page, 'Past visits', 'visit logged at the first branch')
 

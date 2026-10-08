@@ -110,6 +110,21 @@ textarea {
   font-size: 16px; /* 16px stops iOS zooming into inputs */
 }
 
+/* iOS Safari gives date fields a native look with its own minimum width,
+   which ignores width: 100% and runs past the screen edge. */
+input[type='date'] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  min-height: 48px;
+  text-align: left;
+}
+
+input[type='date']::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 input:focus,
 textarea:focus {
   outline: 2px solid var(--accent);
@@ -149,6 +164,31 @@ textarea:focus {
 
 .page-header.with-back h1 {
   font-size: 24px;
+}
+
+.page-header.stacked {
+  padding-top: 8px;
+  padding-bottom: 14px;
+}
+
+.page-header.stacked .back {
+  display: block;
+  min-width: 44px;
+  min-height: 44px;
+  margin-left: -8px;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.page-header.stacked h1 {
+  font-size: 24px;
+}
+
+.eyebrow {
+  margin: 4px 0 2px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 500;
 }
 
 .back {

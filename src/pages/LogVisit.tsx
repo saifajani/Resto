@@ -125,11 +125,13 @@ export default function LogVisit() {
   /** Suggests the next person without a dish yet, so adding a round of dishes is quick. */
   const startDish = () => {
     const withDishes = new Set(dishes.map((d) => d.person_id))
-    const personId = selectedPeople.find((p) => !withDishes.has(p.id))?.id ?? dishes.at(-1)?.person_id ?? selectedPeople[0].id
+    const personId = selectedPeople.find((p) => !withDishes.has(p.id))?.id ?? dishes.at(-1)?.person_id ?? (selectedPeople[0] ?? circle[0]).id
     setEditing({ key: newKey(), person_id: personId, name: '', rating: 0, would_order_again: false, notes: '', photo: null })
   }
 
+  /** Whoever a dish is for joins the visit, since the dishes now come before who was there. */
   const saveDish = (dish: DraftDish) => {
+    setSelected((s) => (s.has(dish.person_id) ? s : new Set(s).add(dish.person_id)))
     setDishes((ds) => (ds.some((d) => d.key === dish.key) ? ds.map((d) => (d.key === dish.key ? dish : d)) : [...ds, dish]))
     setEditing(null)
   }
@@ -187,20 +189,35 @@ export default function LogVisit() {
 
   return (
     <>
-      <header className="page-header with-back">
+      {/* The arrow gets its own row, so the label under it can't read as where it goes. */}
+      <header className="page-header stacked">
         <button className="back" onClick={cancel} aria-label="Cancel">‹</button>
-        <div>
-          <p className="muted small">{isEdit ? 'Edit visit' : 'Log a visit'}</p>
-          <h1>{restaurant?.name ?? ' '}</h1>
-        </div>
+        <p className="eyebrow">{isEdit ? 'Edit visit' : 'Log a visit'}</p>
+        <h1>{restaurant?.name ?? ' '}</h1>
       </header>
 
       <fieldset className="plain" disabled={saved !== null || (isEdit && !original)}>
       <section className="form-section">
-        <label className="field">
-          <span>When</span>
-          <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value || today())} />
-        </label>
+        <h2>What everyone ate</h2>
+        {dishes.length > 0 && (
+          <ul className="dish-list editable">
+            {dishes.map((dish) => (
+              <li key={dish.key}>
+                <DraftPhoto dish={dish} savedUrl={dish.photo_path ? photoUrls[dish.photo_path] : undefined} />
+                <button className="dish-main as-button" onClick={() => setEditing(dish)}>
+                  <div className="dish-name">{dish.name}</div>
+                  <div className="dish-who">{nameOf(dish.person_id)}</div>
+                </button>
+                <Stars rating={dish.rating} />
+                <ReorderBadge yes={dish.would_order_again} />
+                <button className="link danger small" aria-label={`Remove ${dish.name}`} onClick={() => setDishes((ds) => ds.filter((d) => d.key !== dish.key))}>
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button className="secondary wide" onClick={startDish} disabled={circle.length === 0}>+ Add a dish</button>
       </section>
 
       <section className="form-section">
@@ -225,26 +242,10 @@ export default function LogVisit() {
       </section>
 
       <section className="form-section">
-        <h2>What everyone ate</h2>
-        {dishes.length > 0 && (
-          <ul className="dish-list editable">
-            {dishes.map((dish) => (
-              <li key={dish.key}>
-                <DraftPhoto dish={dish} savedUrl={dish.photo_path ? photoUrls[dish.photo_path] : undefined} />
-                <button className="dish-main as-button" onClick={() => setEditing(dish)}>
-                  <div className="dish-name">{dish.name}</div>
-                  <div className="dish-who">{nameOf(dish.person_id)}</div>
-                </button>
-                <Stars rating={dish.rating} />
-                <ReorderBadge yes={dish.would_order_again} />
-                <button className="link danger small" aria-label={`Remove ${dish.name}`} onClick={() => setDishes((ds) => ds.filter((d) => d.key !== dish.key))}>
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <button className="secondary wide" onClick={startDish} disabled={selectedPeople.length === 0}>+ Add a dish</button>
+        <label className="field">
+          <span>When</span>
+          <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value || today())} />
+        </label>
       </section>
 
       <section className="form-section">
@@ -293,7 +294,7 @@ export default function LogVisit() {
       {editing && (
         <DishEditor
           dish={editing}
-          people={selectedPeople}
+          people={[...selectedPeople, ...circle.filter((p) => !selected.has(p.id))]}
           userId={userId}
           suggestions={suggestions}
           savedUrl={editing.photo_path ? photoUrls[editing.photo_path] : undefined}
