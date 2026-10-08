@@ -212,7 +212,7 @@ async function main() {
       ],
     })
     const visits = await owner.visits(r1.id)
-    check('owner sees both visits newest first', visits.length === 2 && visits[0].visited_at > visits[1].visited_at, visits.map((v) => v.visited_at))
+    check('owner sees both visits newest first', visits.length === 2 && visits[0].visited_at! > visits[1].visited_at!, visits.map((v) => v.visited_at))
     const latest = visits[0]
     check('person on a dish is added to the visit automatically', latest.visit_people.some((vp) => vp.person?.id === zayn.id), latest.visit_people)
     check('embedded dishes and owner come back', latest.dishes.length === 2 && latest.owner?.display_name === 'Saif', latest)
@@ -225,6 +225,24 @@ async function main() {
       /rating/)
     check('failed visit left nothing behind', (await owner.visits(r1.id)).length === 2)
     await rejects('cannot delete a person with dishes', () => owner.deletePerson(sarah.id), /has dishes logged/)
+
+    // A visit whose date nobody remembers
+    await owner.createVisit({ restaurantId: r1.id, visitedAt: null, notes: 'Some time last year', personIds: [me.id], dishes: [{ key: 'u', person_id: me.id, name: 'Mango Sticky Rice', rating: 4, would_order_again: true, notes: '', photo: null }] })
+    const withUndated = await owner.visits(r1.id)
+    check('a visit can be saved without a date', withUndated.length === 3 && withUndated[2].notes === 'Some time last year' && withUndated[2].visited_at === null, withUndated.map((v) => v.visited_at))
+    const stillDated = await owner.visitedRestaurants()
+    check(
+      'an undated visit counts, but the list keeps the last real date',
+      stillDated[0].visitCount === 3 && stillDated[0].beenThere && new Date(stillDated[0].myLastVisit!).toISOString() === '2026-09-20T23:00:00.000Z',
+      stillDated[0],
+    )
+    check('the feed still puts it first, as the newest logged', (await owner.feed(1))[0]?.notes === 'Some time last year')
+    const undated = withUndated[2]
+    await owner.updateVisit(undated.id, { visitedAt: new Date('2025-06-01T23:00:00Z'), notes: undated.notes!, personIds: [me.id], dishes: [] })
+    check('a date can be added later', (await owner.visits(r1.id)).find((v) => v.id === undated.id)?.visited_at !== null)
+    await owner.updateVisit(undated.id, { visitedAt: null, notes: undated.notes!, personIds: [me.id], dishes: [] })
+    check('and taken away again', (await owner.visits(r1.id)).find((v) => v.id === undated.id)?.visited_at === null)
+    await owner.deleteVisit(undated.id)
 
     // Several restaurants at once, which is how a chain's other branches load
     const across = await owner.visitsAt([r1.id, other.id])
@@ -386,7 +404,7 @@ async function main() {
     check('an edit with a new photo uploads it', editResult.visitId === saved.visitId && editResult.pendingPhotos.length === 0, editResult)
     const afterEdit = (await owner.visits(terroni.id))[0]
     const edited = (name: string) => afterEdit.dishes.find((d) => d.name === name)
-    check('the visit date and notes change', new Date(afterEdit.visited_at).toISOString() === editedAt.toISOString() && afterEdit.notes === 'Patio was lovely', afterEdit)
+    check('the visit date and notes change', new Date(afterEdit.visited_at!).toISOString() === editedAt.toISOString() && afterEdit.notes === 'Patio was lovely', afterEdit)
     check(
       'a changed dish keeps its id and photo',
       edited('Margherita')?.id === dish('Margherita').id && edited('Margherita')?.rating === 4 && edited('Margherita')?.notes === 'Crust was soggy' &&

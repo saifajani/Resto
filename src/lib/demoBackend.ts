@@ -103,7 +103,9 @@ export function createDemoBackend(): Backend {
     return failed
   }
 
-  const newestFirst = (a: { visited_at: string }, b: { visited_at: string }) => b.visited_at.localeCompare(a.visited_at)
+  /** As the Supabase queries order them: newest first, undated last, then by when they were logged. */
+  const newestFirst = (a: StoredVisit, b: StoredVisit) =>
+    (b.visited_at ?? '').localeCompare(a.visited_at ?? '') || (b.created_at ?? '').localeCompare(a.created_at ?? '')
 
   return {
     mode: 'demo',
@@ -180,7 +182,7 @@ export function createDemoBackend(): Backend {
     },
 
     async feed(limit) {
-      const loggedAt = (v: StoredVisit) => v.created_at ?? v.visited_at
+      const loggedAt = (v: StoredVisit) => v.created_at ?? v.visited_at ?? ''
       return [...store.visits]
         .sort((a, b) => loggedAt(b).localeCompare(loggedAt(a)))
         .slice(0, limit)
@@ -199,7 +201,7 @@ export function createDemoBackend(): Backend {
         id,
         owner_id: me(),
         restaurant_id: visit.restaurantId,
-        visited_at: visit.visitedAt.toISOString(),
+        visited_at: visit.visitedAt?.toISOString() ?? null,
         notes: visit.notes.trim() || null,
         person_ids: personIds,
         created_at: new Date().toISOString(),
@@ -227,7 +229,7 @@ export function createDemoBackend(): Backend {
     async updateVisit(id, visit: VisitChanges) {
       const stored = store.visits.find((v) => v.id === id && v.owner_id === me())
       if (!stored) throw new Error('You can only edit visits you logged')
-      stored.visited_at = visit.visitedAt.toISOString()
+      stored.visited_at = visit.visitedAt?.toISOString() ?? null
       stored.notes = visit.notes.trim() || null
       stored.person_ids = [...new Set([...visit.personIds, ...visit.dishes.map((d) => d.person_id)])]
       const before = store.dishes.filter((d) => d.visit_id === id)

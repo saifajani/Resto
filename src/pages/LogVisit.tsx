@@ -22,7 +22,7 @@ let keyCounter = 0
 const newKey = () => `dish-${Date.now()}-${keyCounter++}`
 
 /** Everything the form holds, to tell whether an edit has changed anything. */
-function snapshot(date: string, notes: string, selected: Set<string>, dishes: DraftDish[]): string {
+function snapshot(date: string | null, notes: string, selected: Set<string>, dishes: DraftDish[]): string {
   return JSON.stringify([date, notes, [...selected].sort(), dishes.map((d) => ({ ...d, photo: d.photo ? 'new' : null }))])
 }
 
@@ -36,6 +36,8 @@ export default function LogVisit() {
   const [circle, setCircle] = useState<Person[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [date, setDate] = useState(today())
+  /** "Don't remember": saved with no date at all. */
+  const [dateUnknown, setDateUnknown] = useState(false)
   const [notes, setNotes] = useState('')
   const [dishes, setDishes] = useState<DraftDish[]>([])
   const [editing, setEditing] = useState<DraftDish | null>(null)
@@ -77,9 +79,10 @@ export default function LogVisit() {
               photo: null,
               photo_path: d.photo_path,
             }))
-          const day = dayOf(new Date(visit.visited_at))
+          const day = visit.visited_at ? dayOf(new Date(visit.visited_at)) : null
           setSelected(chosen)
-          setDate(day)
+          setDate(day ?? today())
+          setDateUnknown(day === null)
           setNotes(visit.notes ?? '')
           setDishes(drafts)
           setOriginal({ visit, snapshot: snapshot(day, visit.notes ?? '', chosen, drafts) })
@@ -139,11 +142,13 @@ export default function LogVisit() {
   const done = () => navigate(`/r/${id}`, { replace: true, state: { restaurant } })
 
   const isEdit = visitId !== undefined
-  const changed = original !== null && snapshot(date, notes, selected, dishes) !== original.snapshot
+  const changed = original !== null && snapshot(dateUnknown ? null : date, notes, selected, dishes) !== original.snapshot
 
   /** An unchanged day keeps its saved time, so editing a dish doesn't move the visit. */
   const visitedAt = () => {
-    if (original && date === dayOf(new Date(original.visit.visited_at))) return new Date(original.visit.visited_at)
+    if (dateUnknown) return null
+    const saved = original?.visit.visited_at
+    if (saved && date === dayOf(new Date(saved))) return new Date(saved)
     return date === today() ? new Date() : new Date(`${date}T19:00:00`)
   }
 
@@ -242,9 +247,16 @@ export default function LogVisit() {
       </section>
 
       <section className="form-section">
-        <label className="field">
-          <span>When</span>
-          <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value || today())} />
+        {!dateUnknown && (
+          <label className="field">
+            <span>When</span>
+            <input type="date" aria-label="Visit date" value={date} max={today()} onChange={(e) => setDate(e.target.value || today())} />
+          </label>
+        )}
+        <label className="toggle">
+          <span>Don't remember the date</span>
+          <input type="checkbox" checked={dateUnknown} onChange={(e) => setDateUnknown(e.target.checked)} />
+          <span className="switch" aria-hidden="true" />
         </label>
       </section>
 

@@ -93,7 +93,8 @@ export default function RestaurantPage() {
   )
 
   const deleteVisit = async (visit: Visit) => {
-    if (!confirm(`Delete the visit on ${formatDate(visit.visited_at)}? This removes every dish logged on it.`)) return
+    const which = visit.visited_at ? `the visit on ${formatDate(visit.visited_at)}` : 'this visit'
+    if (!confirm(`Delete ${which}? This removes every dish logged on it.`)) return
     try {
       await backend.deleteVisit(visit.id)
       setVisits((vs) => (vs ?? []).filter((v) => v.id !== visit.id))
@@ -156,7 +157,7 @@ export default function RestaurantPage() {
               <section key={visit.id} className="card visit">
                 <div className="visit-header">
                   <div>
-                    <div className="visit-date">{wasThere ? formatDate(visit.visited_at) : 'Earlier visit'}</div>
+                    <div className="visit-date">{!wasThere ? 'Earlier visit' : visit.visited_at ? formatDate(visit.visited_at) : 'Date not remembered'}</div>
                     <div className="muted small">
                       {people.map((p) => displayName(p, userId)).join(', ')}
                       {!mine && visit.owner && <> · logged by {visit.owner.display_name}</>}

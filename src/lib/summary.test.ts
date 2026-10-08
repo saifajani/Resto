@@ -110,15 +110,33 @@ describe('groupVisitedRestaurants', () => {
       ME,
     )
     expect(grouped).toEqual([
-      { restaurant: r('a'), lastVisit: '2026-09-20', myLastVisit: '2026-09-20', visitCount: 2, visitedByCircle: false },
-      { restaurant: r('b'), lastVisit: '2026-09-10', myLastVisit: '2026-09-10', visitCount: 1, visitedByCircle: false },
+      { restaurant: r('a'), lastVisit: '2026-09-20', beenThere: true, myLastVisit: '2026-09-20', visitCount: 2, visitedByCircle: false },
+      { restaurant: r('b'), lastVisit: '2026-09-10', beenThere: true, myLastVisit: '2026-09-10', visitCount: 1, visitedByCircle: false },
     ])
   })
 
   it('marks a restaurant only your circle went to', () => {
     const [a] = groupVisitedRestaurants([{ visited_at: '2026-09-20', restaurant: r('a'), visit_people: withoutMe }], ME)
     expect(a.myLastVisit).toBe(null)
+    expect(a.beenThere).toBe(false)
     expect(a.visitedByCircle).toBe(true)
+  })
+
+  it('counts a visit with no date as one you were on, without dating the list by it', () => {
+    const [a] = groupVisitedRestaurants([{ visited_at: null, restaurant: r('a'), visit_people: withMe }], ME)
+    expect(a).toMatchObject({ beenThere: true, myLastVisit: null, lastVisit: null, visitCount: 1 })
+  })
+
+  it('dates the list by a dated visit even when an undated one is listed', () => {
+    // Undated visits come last, as the queries order them.
+    const [a] = groupVisitedRestaurants(
+      [
+        { visited_at: '2026-08-01', restaurant: r('a'), visit_people: withMe },
+        { visited_at: null, restaurant: r('a'), visit_people: withMe },
+      ],
+      ME,
+    )
+    expect(a).toMatchObject({ beenThere: true, myLastVisit: '2026-08-01', lastVisit: '2026-08-01', visitCount: 2 })
   })
 
   it('dates the list by your own latest visit, never someone else\'s', () => {

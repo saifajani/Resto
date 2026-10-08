@@ -91,7 +91,7 @@ export default function Feed() {
                       {!mine && visit.owner && <> by {visit.owner.display_name}</>}
                     </div>
                     <div className="muted small">
-                      {wasThere && <>Visit: {formatDate(visit.visited_at)} · </>}
+                      {wasThere && <>Visit: {visit.visited_at ? formatDate(visit.visited_at) : 'date not remembered'} · </>}
                       {who || 'Nobody listed'}
                     </div>
                   </div>

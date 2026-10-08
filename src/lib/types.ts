@@ -36,7 +36,8 @@ export type Visit = {
   id: string
   owner_id: string
   restaurant_id: string
-  visited_at: string
+  /** Null when nobody remembers the date. */
+  visited_at: string | null
   notes: string | null
   owner: Profile | null
   visit_people: { person: Person | null }[]
@@ -51,9 +52,12 @@ export type FeedVisit = Visit & {
 
 export type VisitedRestaurant = {
   restaurant: Restaurant
-  lastVisit: string
+  /** Null when no visit here has a date. */
+  lastVisit: string | null
   visitCount: number
-  /** The newest visit you were on yourself, or null if you've never been. */
+  /** You were on at least one visit here yourself. */
+  beenThere: boolean
+  /** The newest dated visit you were on yourself, or null if there's none. */
   myLastVisit: string | null
   /** Someone in your circle was here on a visit you weren't on. */
   visitedByCircle: boolean
@@ -104,7 +108,8 @@ export type Place = {
 
 export type NewVisit = {
   restaurantId: string
-  visitedAt: Date
+  /** Null for "don't remember". */
+  visitedAt: Date | null
   notes: string
   personIds: string[]
   dishes: DraftDish[]

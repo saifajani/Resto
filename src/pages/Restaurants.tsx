@@ -35,7 +35,7 @@ export default function Restaurants() {
     const map = new Map<string, Been>()
     for (const m of mine) {
       if (!m.restaurant.place_id) continue
-      if (m.myLastVisit) map.set(m.restaurant.place_id, 'me')
+      if (m.beenThere) map.set(m.restaurant.place_id, 'me')
       else if (m.visitedByCircle && !map.has(m.restaurant.place_id)) map.set(m.restaurant.place_id, 'circle')
     }
     return map
@@ -144,7 +144,7 @@ export default function Restaurants() {
           <div className="row-title">{v.restaurant.name}</div>
           <div className="row-sub">
             {v.visitCount} visit{v.visitCount === 1 ? '' : 's'}
-            {v.myLastVisit ? ` · last ${formatDate(v.myLastVisit)}` : ' · from your circle'}
+            {!v.beenThere ? ' · from your circle' : v.myLastVisit ? ` · last ${formatDate(v.myLastVisit)}` : ''}
           </div>
         </div>
         <span className="chevron" aria-hidden="true">›</span>

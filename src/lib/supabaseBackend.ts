@@ -113,7 +113,8 @@ export function createSupabaseBackend(
         await client
           .from('visits')
           .select('visited_at, restaurant:restaurants(*), visit_people(person:people(linked_user_id))')
-          .order('visited_at', { ascending: false })
+          .order('visited_at', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
           .returns<VisitedRow[]>(),
       )
       return groupVisitedRestaurants(rows, userId())
@@ -125,7 +126,8 @@ export function createSupabaseBackend(
           .from('visits')
           .select(VISIT_COLUMNS)
           .eq('restaurant_id', restaurantId)
-          .order('visited_at', { ascending: false })
+          .order('visited_at', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
           .returns<Visit[]>(),
       )
     },
@@ -137,7 +139,8 @@ export function createSupabaseBackend(
           .from('visits')
           .select(VISIT_COLUMNS)
           .in('restaurant_id', restaurantIds)
-          .order('visited_at', { ascending: false })
+          .order('visited_at', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
           .returns<Visit[]>(),
       )
     },
@@ -161,7 +164,7 @@ export function createSupabaseBackend(
         await client.rpc('create_visit', {
           p_id: visitId,
           p_restaurant_id: visit.restaurantId,
-          p_visited_at: visit.visitedAt.toISOString(),
+          p_visited_at: visit.visitedAt?.toISOString() ?? null,
           p_person_ids: visit.personIds,
           p_dishes: dishes.map(({ id, person_id, name, rating, would_order_again, notes }) => ({
             id,
@@ -183,7 +186,7 @@ export function createSupabaseBackend(
       check(
         await client.rpc('update_visit', {
           p_id: id,
-          p_visited_at: visit.visitedAt.toISOString(),
+          p_visited_at: visit.visitedAt?.toISOString() ?? null,
           p_person_ids: visit.personIds,
           p_dishes: dishes.map(({ id, person_id, name, rating, would_order_again, notes, photo_path }) => ({
             id,
