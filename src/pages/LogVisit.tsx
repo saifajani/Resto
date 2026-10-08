@@ -3,22 +3,32 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { backend } from '../lib/config'
 import { knownDishNames } from '../lib/summary'
 import { shrinkPhoto } from '../lib/photo'
-import { displayName, type DraftDish, type PendingPhoto, type Person, type Restaurant } from '../lib/types'
+import { displayName, visitPeople, type DraftDish, type PendingPhoto, type Person, type Restaurant, type Visit } from '../lib/types'
 import { useUserId } from '../session'
 import { DishPhoto, ErrorNote, ReorderBadge, Sheet, StarPicker, Stars } from '../components/ui'
 import { useObjectUrl } from '../lib/useObjectUrl'
 import { errorMessage } from '../lib/format'
 
-function today(): string {
-  const d = new Date()
+/** A date as the date field holds it, in local time. */
+function dayOf(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function today(): string {
+  return dayOf(new Date())
 }
 
 let keyCounter = 0
 const newKey = () => `dish-${Date.now()}-${keyCounter++}`
 
+/** Everything the form holds, to tell whether an edit has changed anything. */
+function snapshot(date: string, notes: string, selected: Set<string>, dishes: DraftDish[]): string {
+  return JSON.stringify([date, notes, [...selected].sort(), dishes.map((d) => ({ ...d, photo: d.photo ? 'new' : null }))])
+}
+
+/** Logs a new visit, or with a visitId in the address, edits one you logged. */
 export default function LogVisit() {
-  const { id = '' } = useParams()
+  const { id = '', visitId } = useParams()
   const navigate = useNavigate()
   const userId = useUserId()
   const passed = (useLocation().state as { restaurant?: Restaurant } | null)?.restaurant
@@ -33,6 +43,10 @@ export default function LogVisit() {
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** When editing: the visit as saved, and the form as it started, to spot changes. */
+  const [original, setOriginal] = useState<{ visit: Visit; snapshot: string } | null>(null)
+  /** Links for photos that are already saved, keyed by photo_path. */
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
   /** Set once the visit is saved but some photos still need uploading. */
   const [saved, setSaved] = useState<{ visitId: string; pending: PendingPhoto[]; retried: boolean } | null>(null)
 
@@ -40,14 +54,45 @@ export default function LogVisit() {
     const known = passed?.id === id ? passed : null
     Promise.all([backend.myCircle(), backend.visits(id), known ? Promise.resolve(known) : backend.getRestaurant(id)])
       .then(([people, visits, r]) => {
+        setSuggestions(knownDishNames(visits))
+        if (r) setRestaurant(r)
+        if (visitId) {
+          const visit = visits.find((v) => v.id === visitId)
+          if (!visit || visit.owner_id !== userId) {
+            setError('This visit can only be edited by whoever logged it.')
+            return
+          }
+          setCircle(people)
+          const chosen = new Set(visitPeople(visit).map((p) => p.id))
+          const drafts = [...visit.dishes]
+            .sort((a, b) => a.created_at.localeCompare(b.created_at))
+            .map((d): DraftDish => ({
+              key: d.id,
+              id: d.id,
+              person_id: d.person_id,
+              name: d.name,
+              rating: d.rating,
+              would_order_again: d.would_order_again,
+              notes: d.notes ?? '',
+              photo: null,
+              photo_path: d.photo_path,
+            }))
+          const day = dayOf(new Date(visit.visited_at))
+          setSelected(chosen)
+          setDate(day)
+          setNotes(visit.notes ?? '')
+          setDishes(drafts)
+          setOriginal({ visit, snapshot: snapshot(day, visit.notes ?? '', chosen, drafts) })
+          const paths = drafts.flatMap((d) => (d.photo_path ? [d.photo_path] : []))
+          backend.photoUrls(paths).then(setPhotoUrls, () => {})
+          return
+        }
         setCircle(people)
         const me = people.find((p) => p.is_me)
         if (me) setSelected((s) => (s.size ? s : new Set([me.id])))
-        setSuggestions(knownDishNames(visits))
-        if (r) setRestaurant(r)
       })
       .catch((e) => setError(errorMessage(e)))
-  }, [id, passed])
+  }, [id, passed, visitId, userId])
 
   const selectedPeople = useMemo(() => circle.filter((p) => selected.has(p.id)), [circle, selected])
   const nameOf = (personId: string) => displayName(circle.find((p) => p.id === personId), userId)
@@ -91,17 +136,24 @@ export default function LogVisit() {
 
   const done = () => navigate(`/r/${id}`, { replace: true, state: { restaurant } })
 
+  const isEdit = visitId !== undefined
+  const changed = original !== null && snapshot(date, notes, selected, dishes) !== original.snapshot
+
+  /** An unchanged day keeps its saved time, so editing a dish doesn't move the visit. */
+  const visitedAt = () => {
+    if (original && date === dayOf(new Date(original.visit.visited_at))) return new Date(original.visit.visited_at)
+    return date === today() ? new Date() : new Date(`${date}T19:00:00`)
+  }
+
   const save = async () => {
+    if (isEdit && !changed) return done()
     setSaving(true)
     setError(null)
     try {
-      const result = await backend.createVisit({
-        restaurantId: id,
-        visitedAt: date === today() ? new Date() : new Date(`${date}T19:00:00`),
-        notes,
-        personIds: [...selected],
-        dishes,
-      })
+      const visit = { visitedAt: visitedAt(), notes, personIds: [...selected], dishes }
+      const result = isEdit
+        ? await backend.updateVisit(visitId, visit)
+        : await backend.createVisit({ restaurantId: id, ...visit })
       if (result.pendingPhotos.length === 0) return done()
       setSaved({ visitId: result.visitId, pending: result.pendingPhotos, retried: false })
     } catch (e) {
@@ -125,7 +177,7 @@ export default function LogVisit() {
 
   const cancel = () => {
     if (saved) return done()
-    if (dishes.length && !confirm('Discard this visit?')) return
+    if (isEdit ? changed && !confirm('Discard your changes?') : dishes.length && !confirm('Discard this visit?')) return
     navigate(-1)
   }
 
@@ -138,12 +190,12 @@ export default function LogVisit() {
       <header className="page-header with-back">
         <button className="back" onClick={cancel} aria-label="Cancel">‹</button>
         <div>
-          <p className="muted small">Log a visit</p>
+          <p className="muted small">{isEdit ? 'Edit visit' : 'Log a visit'}</p>
           <h1>{restaurant?.name ?? ' '}</h1>
         </div>
       </header>
 
-      <fieldset className="plain" disabled={saved !== null}>
+      <fieldset className="plain" disabled={saved !== null || (isEdit && !original)}>
       <section className="form-section">
         <label className="field">
           <span>When</span>
@@ -178,7 +230,7 @@ export default function LogVisit() {
           <ul className="dish-list editable">
             {dishes.map((dish) => (
               <li key={dish.key}>
-                <DraftPhoto dish={dish} />
+                <DraftPhoto dish={dish} savedUrl={dish.photo_path ? photoUrls[dish.photo_path] : undefined} />
                 <button className="dish-main as-button" onClick={() => setEditing(dish)}>
                   <div className="dish-name">{dish.name}</div>
                   <div className="dish-who">{nameOf(dish.person_id)}</div>
@@ -211,7 +263,7 @@ export default function LogVisit() {
             {/* In the pinned bar so it can't be missed below the fold. */}
             <div className="photo-failed" role="alert">
               <p>
-                <strong>Your visit is saved</strong>, but {one ? 'the photo' : `${saved.pending.length} photos`} of{' '}
+                <strong>{isEdit ? 'Your changes are saved' : 'Your visit is saved'}</strong>, but {one ? 'the photo' : `${saved.pending.length} photos`} of{' '}
                 {listNames(failedNames)} didn't upload. This usually means the connection dropped.
               </p>
               <p>
@@ -226,10 +278,14 @@ export default function LogVisit() {
             </div>
           </div>
         ) : (
-          <button className="primary wide" onClick={save} disabled={saving || dishes.length === 0 || selected.size === 0}>
+          <button className="primary wide" onClick={save} disabled={saving || dishes.length === 0 || selected.size === 0 || (isEdit && !original)}>
             {saving
               ? hasPhotos ? 'Saving visit and photos…' : 'Saving…'
-              : dishes.length === 0 ? 'Add a dish to save' : `Save visit (${dishes.length} dish${dishes.length === 1 ? '' : 'es'})`}
+              : dishes.length === 0
+                ? 'Add a dish to save'
+                : isEdit
+                  ? 'Save changes'
+                  : `Save visit (${dishes.length} dish${dishes.length === 1 ? '' : 'es'})`}
           </button>
         )}
       </div>
@@ -240,6 +296,7 @@ export default function LogVisit() {
           people={selectedPeople}
           userId={userId}
           suggestions={suggestions}
+          savedUrl={editing.photo_path ? photoUrls[editing.photo_path] : undefined}
           onCancel={() => setEditing(null)}
           onSave={saveDish}
         />
@@ -253,8 +310,9 @@ function listNames(names: string[]): string {
   return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
 }
 
-function DraftPhoto({ dish }: { dish: DraftDish }) {
-  return <DishPhoto url={useObjectUrl(dish.photo)} name={dish.name} />
+/** A new photo from this device, or else the one already saved with the dish. */
+function DraftPhoto({ dish, savedUrl }: { dish: DraftDish; savedUrl: string | undefined }) {
+  return <DishPhoto url={useObjectUrl(dish.photo) ?? savedUrl} name={dish.name} />
 }
 
 function DishEditor(props: {
@@ -262,6 +320,8 @@ function DishEditor(props: {
   people: Person[]
   userId: string | null
   suggestions: string[]
+  /** The link for the dish's saved photo, when it has one. */
+  savedUrl: string | undefined
   onCancel: () => void
   onSave: (dish: DraftDish) => void
 }) {
@@ -272,7 +332,9 @@ function DishEditor(props: {
     .filter((s) => (typed ? s.toLowerCase().includes(typed) && s.toLowerCase() !== typed : true))
     .slice(0, 8)
   const valid = dish.name.trim().length > 0 && dish.rating >= 1
-  const photoUrl = useObjectUrl(dish.photo)
+  const newPhotoUrl = useObjectUrl(dish.photo)
+  // Shown until it's removed or a new photo replaces it.
+  const photoUrl = newPhotoUrl ?? (dish.photo_path ? props.savedUrl : undefined)
   const fileInput = useRef<HTMLInputElement>(null)
   const [preparing, setPreparing] = useState(false)
   const [photoError, setPhotoError] = useState<string | null>(null)
@@ -352,12 +414,12 @@ function DishEditor(props: {
         />
         {preparing ? (
           <p className="muted small">Preparing photo…</p>
-        ) : photoUrl ? (
+        ) : photoUrl || dish.photo || dish.photo_path ? (
           <div className="photo-field">
             <DishPhoto url={photoUrl} name={dish.name || 'this dish'} size="large" />
             <div className="stack">
               <button type="button" className="link" onClick={() => fileInput.current?.click()}>Replace photo</button>
-              <button type="button" className="link danger" onClick={() => update({ photo: null })}>Remove photo</button>
+              <button type="button" className="link danger" onClick={() => update({ photo: null, photo_path: null })}>Remove photo</button>
             </div>
           </div>
         ) : (

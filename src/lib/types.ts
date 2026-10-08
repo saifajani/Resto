@@ -62,6 +62,8 @@ export type VisitedRestaurant = {
 /** A dish being entered on the log visit screen, before it's saved. */
 export type DraftDish = {
   key: string
+  /** Set when editing a dish that's already saved. */
+  id?: string
   person_id: string
   name: string
   rating: number
@@ -69,6 +71,8 @@ export type DraftDish = {
   notes: string
   /** Already shrunk to a small JPEG. Held in memory until the visit is saved. */
   photo: Blob | null
+  /** The saved dish's photo, kept unless removed. A new `photo` replaces it. */
+  photo_path?: string | null
 }
 
 /** A dish photo that hasn't uploaded yet, kept so the upload can be retried. */
@@ -105,6 +109,9 @@ export type NewVisit = {
   personIds: string[]
   dishes: DraftDish[]
 }
+
+/** Everything about a saved visit that can be edited. Its restaurant stays put. */
+export type VisitChanges = Omit<NewVisit, 'restaurantId'>
 
 export function visitPeople(visit: Visit): Person[] {
   return visit.visit_people.flatMap((vp) => (vp.person ? [vp.person] : []))

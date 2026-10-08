@@ -2,7 +2,7 @@ import { groupVisitedRestaurants, type AuthListener, type Backend } from './back
 import { demoPhotos } from './demoPhotoStore'
 import { uuid } from './ids'
 import { photoPath } from './photo'
-import type { Dish, FeedVisit, NewVisit, PendingPhoto, Person, Profile, Restaurant, Visit } from './types'
+import type { Dish, FeedVisit, NewVisit, PendingPhoto, Person, Profile, Restaurant, Visit, VisitChanges } from './types'
 
 /**
  * A single-user backend that keeps everything in this browser's localStorage.
@@ -74,6 +74,12 @@ export function createDemoBackend(): Backend {
   })
   /** Photo links handed out so far, so each photo gets one object URL. */
   const links = new Map<string, string>()
+  /** A replaced or removed photo needs a fresh link next time. */
+  const forgetLink = (path: string) => {
+    const url = links.get(path)
+    if (url) URL.revokeObjectURL(url)
+    links.delete(path)
+  }
 
   const uploadPhotos = async (visitId: string, pending: PendingPhoto[]): Promise<PendingPhoto[]> => {
     const failed: PendingPhoto[] = []
@@ -87,6 +93,7 @@ export function createDemoBackend(): Backend {
         }
         const path = photoPath(me(), visitId, p.dishId)
         await demoPhotos.put(path, p.photo)
+        forgetLink(path)
         dish.photo_path = path
       } catch {
         failed.push(p)
@@ -214,6 +221,43 @@ export function createDemoBackend(): Backend {
         })
       })
       save()
+      return { visitId: id, pendingPhotos: await uploadPhotos(id, pending) }
+    },
+
+    async updateVisit(id, visit: VisitChanges) {
+      const stored = store.visits.find((v) => v.id === id && v.owner_id === me())
+      if (!stored) throw new Error('You can only edit visits you logged')
+      stored.visited_at = visit.visitedAt.toISOString()
+      stored.notes = visit.notes.trim() || null
+      stored.person_ids = [...new Set([...visit.personIds, ...visit.dishes.map((d) => d.person_id)])]
+      const before = store.dishes.filter((d) => d.visit_id === id)
+      const pending: PendingPhoto[] = []
+      const now = Date.now()
+      const after = visit.dishes.map((d, i): StoredDish => {
+        const old = before.find((b) => b.id === d.id)
+        const dishId = old?.id ?? uuid()
+        if (d.photo) pending.push({ key: d.key, dishId, photo: d.photo })
+        return {
+          id: dishId,
+          visit_id: id,
+          person_id: d.person_id,
+          name: d.name.trim(),
+          rating: d.rating,
+          would_order_again: d.would_order_again,
+          notes: d.notes.trim() || null,
+          // As in Supabase: a replaced photo stays until the new one uploads.
+          photo_path: d.photo_path ? (old?.photo_path ?? null) : null,
+          created_at: old?.created_at ?? new Date(now + i).toISOString(),
+        }
+      })
+      store.dishes = [...store.dishes.filter((d) => d.visit_id !== id), ...after]
+      save()
+      const kept = new Set(after.map((d) => d.photo_path))
+      for (const old of before) {
+        if (!old.photo_path || kept.has(old.photo_path)) continue
+        forgetLink(old.photo_path)
+        await demoPhotos.remove(old.photo_path).catch(() => undefined)
+      }
       return { visitId: id, pendingPhotos: await uploadPhotos(id, pending) }
     },
 

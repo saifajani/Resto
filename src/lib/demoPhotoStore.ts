@@ -34,6 +34,7 @@ async function run<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) 
 export const demoPhotos = {
   put: (path: string, photo: Blob) => run('readwrite', (s) => s.put(photo, path)).then(() => undefined),
   get: (path: string) => run<Blob | undefined>('readonly', (s) => s.get(path)),
+  remove: (path: string) => run('readwrite', (s) => s.delete(path)).then(() => undefined),
   /** Removes every photo whose path starts with `folder/`. */
   removeFolder: (folder: string) =>
     run('readwrite', (s) => s.delete(IDBKeyRange.bound(`${folder}/`, `${folder}/￿`))).then(() => undefined),

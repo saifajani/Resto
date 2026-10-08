@@ -163,7 +163,10 @@ export default function RestaurantPage() {
                     </div>
                   </div>
                   {mine && (
-                    <button className="link danger small" onClick={() => deleteVisit(visit)}>Delete</button>
+                    <div className="visit-actions">
+                      <Link className="link small" to={`/r/${id}/visits/${visit.id}/edit`} state={{ restaurant }}>Edit</Link>
+                      <button className="link danger small" onClick={() => deleteVisit(visit)}>Delete</button>
+                    </div>
                   )}
                 </div>
                 <ul className="dish-list">

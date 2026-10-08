@@ -1,4 +1,4 @@
-import type { FeedVisit, NewVisit, PendingPhoto, Person, Place, Profile, Restaurant, SavedVisit, Visit, VisitedRestaurant } from './types'
+import type { FeedVisit, NewVisit, PendingPhoto, Person, Place, Profile, Restaurant, SavedVisit, Visit, VisitChanges, VisitedRestaurant } from './types'
 
 export type AuthListener = (userId: string | null) => void
 
@@ -23,6 +23,12 @@ export interface Backend {
   feed(limit: number): Promise<FeedVisit[]>
   /** Saves the visit, then uploads its photos. Photos that fail come back in pendingPhotos. */
   createVisit(visit: NewVisit): Promise<SavedVisit>
+  /**
+   * Replaces a visit you logged with its edited version, then uploads new and
+   * replaced photos and removes the files of photos that are gone. Like
+   * createVisit, photos that fail come back in pendingPhotos.
+   */
+  updateVisit(id: string, visit: VisitChanges): Promise<SavedVisit>
   /** Uploads photos for a saved visit again. Returns the ones that still failed. */
   retryPhotos(visitId: string, photos: PendingPhoto[]): Promise<PendingPhoto[]>
   /** Short-lived links for showing photos, keyed by photo_path. Missing ones are left out. */

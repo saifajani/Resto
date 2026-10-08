@@ -6,7 +6,7 @@ Vitest unit tests next to the code (`src/**/*.test.ts`), for the "what to order"
 
 ## `npm run test:e2e`
 
-Builds the app and drives it in a phone-sized Chromium using Playwright, in demo mode, with map responses mocked. It runs twice, once with Google Places and once with OpenStreetMap, and checks that Google calls send the key, use the cache and close each search session with one Place Details call. It covers signing in, nearby and search, logging visits with several dishes and people, the "what to order" summary, deleting, the People and Profile tabs, reloads, dark mode and denied location.
+Builds the app and drives it in a phone-sized Chromium using Playwright, in demo mode, with map responses mocked. It runs twice, once with Google Places and once with OpenStreetMap, and checks that Google calls send the key, use the cache and close each search session with one Place Details call. It covers signing in, nearby and search, logging visits with several dishes and people, the "what to order" summary, editing a visit (including replacing a photo), deleting, the People and Profile tabs, reloads, dark mode and denied location.
 
 Set `CHROMIUM_PATH` if Chromium isn't at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, and `SCREENSHOT_DIR` to save a screenshot of each step.
 

@@ -51,9 +51,9 @@ export default function App() {
 
 function Shell() {
   const location = useLocation()
-  // Both are single steps with their own way out, so the tabs would only be a
+  // These are all single steps with their own way out, so the tabs would only be a
   // way to lose your place halfway through.
-  const hideTabs = location.pathname.endsWith('/log') || location.pathname.startsWith('/join/')
+  const hideTabs = /\/(log|edit)$/.test(location.pathname) || location.pathname.startsWith('/join/')
   return (
     <>
       {backend.mode === 'demo' && (
@@ -64,6 +64,7 @@ function Shell() {
           <Route path="/" element={<Restaurants />} />
           <Route path="/r/:id" element={<RestaurantPage />} />
           <Route path="/r/:id/log" element={<LogVisit />} />
+          <Route path="/r/:id/visits/:visitId/edit" element={<LogVisit />} />
           <Route path="/join/:code" element={<JoinInvite />} />
           <Route path="/feed" element={<Feed />} />
           <Route path="/people" element={<People />} />

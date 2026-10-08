@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { groupVisitedRestaurants, type AuthListener, type Backend, type VisitedRow } from './backend'
 import { uuid } from './ids'
 import { PHOTO_BUCKET, photoPath } from './photo'
-import type { FeedVisit, NewVisit, PendingPhoto, Person, Place, Profile, Restaurant, Visit } from './types'
+import type { FeedVisit, NewVisit, PendingPhoto, Person, Place, Profile, Restaurant, Visit, VisitChanges } from './types'
 
 const PERSON_COLUMNS = 'id, owner_id, name, is_me, linked_user_id, invite_code'
 /** How long a photo link works. The restaurant screen asks for fresh ones on every load. */
@@ -176,6 +176,43 @@ export function createSupabaseBackend(
       )
       const pending = dishes.flatMap((d) => (d.photo ? [{ key: d.key, dishId: d.id, photo: d.photo }] : []))
       return { visitId, pendingPhotos: await uploadPhotos(visitId, pending) }
+    },
+
+    async updateVisit(id, visit: VisitChanges) {
+      const dishes = visit.dishes.map((d) => ({ ...d, id: d.id ?? uuid() }))
+      check(
+        await client.rpc('update_visit', {
+          p_id: id,
+          p_visited_at: visit.visitedAt.toISOString(),
+          p_person_ids: visit.personIds,
+          p_dishes: dishes.map(({ id, person_id, name, rating, would_order_again, notes, photo_path }) => ({
+            id,
+            person_id,
+            name,
+            rating,
+            would_order_again,
+            notes,
+            // A replaced photo keeps its path until the new file overwrites it,
+            // so a failed upload leaves the old photo showing rather than none.
+            keep_photo: Boolean(photo_path),
+          })),
+          p_notes: visit.notes,
+        }),
+      )
+      // Removed dishes and photos leave files behind. Clear them before
+      // uploading, since a replacement goes to the same path. Best effort: a
+      // leftover file only costs space.
+      const folder = `${userId()}/${id}`
+      const kept = new Set(dishes.flatMap((d) => (d.photo_path ? [d.photo_path] : [])))
+      try {
+        const { data } = await photos().list(folder)
+        const gone = (data ?? []).map((f) => `${folder}/${f.name}`).filter((path) => !kept.has(path))
+        if (gone.length) await photos().remove(gone)
+      } catch {
+        // The edit is saved, which is what matters.
+      }
+      const pending = dishes.flatMap((d) => (d.photo ? [{ key: d.key, dishId: d.id, photo: d.photo }] : []))
+      return { visitId: id, pendingPhotos: await uploadPhotos(id, pending) }
     },
 
     async retryPhotos(visitId, pending) {

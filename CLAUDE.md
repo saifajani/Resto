@@ -10,6 +10,7 @@ Resto is a personal and family app for remembering what everyone ordered at rest
 - **Restaurants** (`/`): the "Where are you?" list of restaurants around you (places you've visited are pinned above it), search, and your restaurants
 - **Restaurant** (`/r/:id`): a "what to order" summary per person, what was ordered at other branches of the same chain, plus the visit history
 - **Log a visit** (`/r/:id/log`): who was there, and each dish with 1 to 5 stars, a "would order again" toggle, notes and an optional photo
+- **Edit a visit** (`/r/:id/visits/:visitId/edit`): the same screen, filled in from a visit you logged. Only whoever logged a visit sees its Edit and Delete links
 - **Join** (`/join/:code`): where an invite link lands, so the code is one tap rather than a hunt for the Profile tab
 - **Feed** (`/feed`): the latest visits from you and everyone whose circle you're in, newest logged first, 20 at a time
 - **People** (`/people`): your circle, plus invite codes so companions can see the visits they were on
@@ -172,6 +173,7 @@ One optional photo per dish, in the private `dish-photos` bucket at `<owner id>/
 - **Saving:** `createVisit` picks the visit and dish ids, calls `create_visit`, then uploads each photo and sets `dishes.photo_path` for the ones that worked. The visit is always saved; photos that failed come back as `pendingPhotos`, and Log a visit stays on screen explaining which dish's photo didn't upload, with **Try again** (`retryPhotos`) and **Skip**. Never drop a photo silently.
 - **Access:** storage policies read the owner and visit from the path. Reading needs `can_view_visit` (or it's your own folder); uploading needs your own folder and `owns_visit`. A check constraint pins `photo_path` to the dish's own visit folder.
 - **Showing:** the bucket is private, so the restaurant screen asks `photoUrls` for signed links (an hour) on every load.
+- **Editing:** `updateVisit` sends the whole edited visit to `update_visit` (`20261008131811_edit_visits.sql`), which updates dishes whose id is already on the visit, adds new ones and removes the rest, in one transaction. Each dish says only `keep_photo`, never a path. A **replaced** photo keeps its old path until the new file overwrites it at the same path, so a failed upload leaves the old photo showing rather than none, and the same Try again / Skip screen follows. After the call the app removes every file in the visit folder that no kept dish points at, **before** uploading, since a replacement lands on the same path. An unchanged date keeps the saved time, and saving with nothing changed just goes back.
 - **Deleting:** storage files don't cascade with rows, and Supabase blocks deleting them from SQL, so `deleteVisit` lists and removes the visit's folder itself.
 - **Demo mode** keeps photos in IndexedDB (`demoPhotoStore.ts`), since localStorage holds only about 5 MB.
 
@@ -189,7 +191,7 @@ Supabase Auth with **emailed 6-digit codes** (`signInWithOtp` + `verifyOtp`), no
 - An invite can be sent as the **code** or as a **link** (`/join/<code>`). The code is offered first, so an installed app stays the installed app; the link is for someone who has not got Resto yet and carries the code through sign-up to `JoinInvite`, which redeems it in one tap. Both end at the same `claim_invite`.
 - Invites work **both ways**. Right after `claim_invite`, the app shows a "Share back" sheet (`src/components/LinkBackSheet.tsx`) asking which of the redeemer's own people is the inviter (a name match is preselected, or "Not in my list" adds them). That calls `link_back(owner_id, person_id)`, which links the inviter into the redeemer's circle. It only works for someone whose invite you've redeemed, and is a no-op if already linked. Skipping it leaves the link one-way; People > "Circles you're in" then shows a **Share back** button.
 - Helper functions (`can_view_visit`, `can_view_person`, `can_view_profile`, `owns_visit`, `owns_person`) are `SECURITY DEFINER` so that policies don't recurse.
-- Writes that must be atomic go through RPCs: `create_visit` (visit, people and dishes in one transaction), `get_or_create_restaurant`, `set_display_name`.
+- Writes that must be atomic go through RPCs: `create_visit` (visit, people and dishes in one transaction), `update_visit` (the same, for an edit; only the visit's owner, enforced by RLS), `get_or_create_restaurant`, `set_display_name`.
 
 ### Chains (`src/lib/chain.ts`)
 

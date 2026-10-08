@@ -13,7 +13,7 @@ import { createHmac } from 'node:crypto'
 import http from 'node:http'
 import { createClient } from '@supabase/supabase-js'
 import { createSupabaseBackend } from '../src/lib/supabaseBackend'
-import type { Place } from '../src/lib/types'
+import type { Dish, DraftDish, Place } from '../src/lib/types'
 
 const OWNER = '11111111-1111-1111-1111-111111111111'
 const WIFE = '22222222-2222-2222-2222-222222222222'
@@ -140,6 +140,10 @@ function clientFor(url: string, userId: string) {
 
 function backendFor(url: string, userId: string) {
   return createSupabaseBackend(clientFor(url, userId), { getUserId: () => userId })
+}
+
+function visitPeopleIds(visit: { visit_people: { person: { id: string } | null }[] }): string {
+  return visit.visit_people.flatMap((vp) => (vp.person ? [vp.person.id] : [])).sort().join()
 }
 
 let failures = 0
@@ -346,6 +350,77 @@ async function main() {
     check("companion can't add photos to someone else's visit", intoOwners.error !== null && intoOwn.error !== null)
     const wifeRemove = await wifeClient.storage.from('dish-photos').remove(paths)
     check("companion can't remove the owner's photos", (wifeRemove.data ?? []).length === 0 && Object.keys(await owner.photoUrls(paths)).length === 2)
+
+    // Editing: the saved visit, as the edit screen sends it back
+    const draft = (d: Dish, patch: Partial<DraftDish> = {}): DraftDish => ({
+      key: d.id, id: d.id, person_id: d.person_id, name: d.name, rating: d.rating,
+      would_order_again: d.would_order_again, notes: d.notes ?? '', photo: null, photo_path: d.photo_path, ...patch,
+    })
+    const files = async () =>
+      ((await ownerClient.schema('storage').from('objects').select('name').like('name', `${OWNER}/${saved.visitId}/%`)).data ?? []).map((o) => o.name).sort()
+    const beforeEdit = (await owner.visits(terroni.id))[0]
+    const dish = (name: string) => beforeEdit.dishes.find((d) => d.name === name)!
+    const editedAt = new Date('2026-09-05T23:00:00Z')
+    const edit = {
+      visitedAt: editedAt,
+      notes: 'Patio was lovely',
+      personIds: [me.id],
+      dishes: [
+        draft(dish('Margherita'), { rating: 4, notes: 'Crust was soggy' }),
+        draft(dish('Sparkling Water'), { person_id: me.id, photo: jpeg('water') }),
+        { key: 'new', person_id: zayn.id, name: 'Arancini ', rating: 5, would_order_again: true, notes: '', photo: null },
+      ],
+    }
+
+    await rejects('companion cannot edit the owner\'s visit', () => wife.updateVisit(saved.visitId, edit), /only edit visits you logged/)
+    await rejects('outsider cannot edit it either', () => outsider.updateVisit(saved.visitId, edit), /only edit visits you logged/)
+    await rejects('an edit with a bad rating is rejected', () =>
+      owner.updateVisit(saved.visitId, { ...edit, dishes: [draft(dish('Margherita'), { rating: 9 })] }), /rating/)
+    await rejects("a dish from another visit can't be moved in", () =>
+      owner.updateVisit(saved.visitId, { ...edit, dishes: [...edit.dishes, draft(visits[1].dishes[0])] }), /duplicate key|dishes_pkey/)
+    const untouched = (await owner.visits(terroni.id))[0]
+    check('failed edits change nothing', untouched.notes === null && untouched.dishes.length === 3 && untouched.dishes.find((d) => d.name === 'Margherita')?.rating === 5, untouched)
+    check('the moved dish stayed where it was', (await owner.visits(r1.id)).some((v) => v.dishes.some((d) => d.id === visits[1].dishes[0].id)))
+
+    const editResult = await owner.updateVisit(saved.visitId, edit)
+    check('an edit with a new photo uploads it', editResult.visitId === saved.visitId && editResult.pendingPhotos.length === 0, editResult)
+    const afterEdit = (await owner.visits(terroni.id))[0]
+    const edited = (name: string) => afterEdit.dishes.find((d) => d.name === name)
+    check('the visit date and notes change', new Date(afterEdit.visited_at).toISOString() === editedAt.toISOString() && afterEdit.notes === 'Patio was lovely', afterEdit)
+    check(
+      'a changed dish keeps its id and photo',
+      edited('Margherita')?.id === dish('Margherita').id && edited('Margherita')?.rating === 4 && edited('Margherita')?.notes === 'Crust was soggy' &&
+        edited('Margherita')?.photo_path === dish('Margherita').photo_path,
+      edited('Margherita'),
+    )
+    check('a removed dish is gone and a new one is added, trimmed', afterEdit.dishes.length === 3 && !edited('Tiramisu') && edited('Arancini')?.person_id === zayn.id, afterEdit.dishes.map((d) => d.name))
+    check('a dish can move to someone else', edited('Sparkling Water')?.person_id === me.id)
+    check('a photo can be added to a saved dish', edited('Sparkling Water')?.photo_path === `${OWNER}/${saved.visitId}/${dish('Sparkling Water').id}.jpg`)
+    check(
+      'who was there follows the edit, including people on new dishes',
+      visitPeopleIds(afterEdit) === [me.id, zayn.id].sort().join(),
+      afterEdit.visit_people,
+    )
+    check(
+      "a removed dish's photo file is deleted",
+      (await files()).join() === [dish('Margherita').photo_path!, edited('Sparkling Water')!.photo_path!].sort().join(),
+      await files(),
+    )
+    check('the companion sees the edit', (await wife.visits(terroni.id))[0]?.notes === 'Patio was lovely')
+
+    // Replacing a photo: if the new one fails to upload, the old one stays.
+    failUploads = 1
+    const replaced = await owner.updateVisit(saved.visitId, {
+      ...edit,
+      dishes: afterEdit.dishes.map((d) => draft(d, d.name === 'Margherita' ? { photo: jpeg('better pizza') } : {})),
+    })
+    check('a replacement that fails comes back to retry', replaced.pendingPhotos.length === 1)
+    check('and the old photo is still there meanwhile', (await owner.visits(terroni.id))[0].dishes.find((d) => d.name === 'Margherita')?.photo_path === dish('Margherita').photo_path && (await files()).length === 2)
+    check('retrying the replacement works', (await owner.retryPhotos(saved.visitId, replaced.pendingPhotos)).length === 0)
+
+    // Removing a photo
+    await owner.updateVisit(saved.visitId, { ...edit, dishes: afterEdit.dishes.map((d) => draft(d, d.name === 'Margherita' ? { photo_path: null } : {})) })
+    check('a removed photo clears the dish and its file', (await owner.visits(terroni.id))[0].dishes.find((d) => d.name === 'Margherita')?.photo_path === null && (await files()).length === 1, await files())
 
     await owner.deleteVisit(saved.visitId)
     const left = await ownerClient.schema('storage').from('objects').select('name').like('name', `${OWNER}/${saved.visitId}/%`)

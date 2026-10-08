@@ -508,6 +508,16 @@ button.row:active {
   margin-bottom: 4px;
 }
 
+.visit-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.visit-actions a.link {
+  text-decoration: none;
+}
+
 .visit-date {
   font-weight: 600;
 }
