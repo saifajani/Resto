@@ -152,8 +152,9 @@ export default function Restaurants() {
     </li>
   )
 
-  const beenHere = (nearby ?? []).filter((p) => visitedPlaces.has(p.id)).sort(byDistance)
-  const others = (nearby ?? []).filter((p) => !visitedPlaces.has(p.id)).sort(byDistance)
+  // Places you or your circle have been to stay in distance order with a mark on
+  // the row, rather than pinned above in a list of their own that repeated them.
+  const others = [...(nearby ?? [])].sort(byDistance)
   const myMatches = mine.filter((m) => m.restaurant.name.toLowerCase().includes(trimmed.toLowerCase()))
 
   return (
@@ -207,12 +208,6 @@ export default function Restaurants() {
             <p className="notice">
               Location is off for this site, so we can't show what's nearby. Turn it on in your browser settings, or search by name above.
             </p>
-          )}
-          {beenHere.length > 0 && (
-            <section>
-              <h2>You've been here</h2>
-              <ul className="list">{beenHere.map(placeRow)}</ul>
-            </section>
           )}
           {status !== 'denied' && (
             <section>

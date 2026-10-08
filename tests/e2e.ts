@@ -342,10 +342,17 @@ async function main() {
 
     // Back to list: marked as visited
     await page.getByRole('link', { name: 'Restaurants' }).click()
-    await expectVisible(page, "You've been here", 'visited place pinned in nearby')
+    await expectVisible(page, '2 visits', 'your restaurants shows visit count')
+    // The nearby list loads separately, so wait for its rows before counting marks.
+    await page.getByRole('button', { name: 'Show more' }).waitFor()
+    ok('no separate section for places you have been', (await page.getByRole('heading', { name: "You've been here" }).count()) === 0)
+    const nearbyList = page.locator('section', { has: page.getByRole('heading', { name: /Where are you/ }) })
+    ok(
+      'a visited place stays in the nearby list, marked',
+      (await nearbyList.locator('.row', { hasText: 'Pai Northern Thai' }).getByRole('img', { name: "You've been here" }).count()) === 1,
+    )
     ok('visited row carries the filled mark', (await page.getByRole('img', { name: "You've been here" }).count()) === 1)
     ok('a place nobody has been to has no mark', (await page.getByRole('img', { name: /has been here/ }).count()) === 0)
-    await expectVisible(page, '2 visits', 'your restaurants shows visit count')
     await shot(page, '06-nearby-visited')
 
     // Chains: a dish rated at one branch has to reach the other, because the
